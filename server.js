@@ -1011,9 +1011,24 @@ app.post("/createStoppage", async (req, res) => {
     group,
   } = req.body;
 
-  // Tambahkan 1 detik ke date_start
+  // -- New Code --
+  // Konversi date_start menjadi objek Date
   let newDateStart = new Date(date_start);
-  newDateStart.setSeconds(newDateStart.getSeconds() + 1);
+
+  // Cek shift dan tambahkan 1 detik jika sesuai
+  const shiftTimes = {
+    I: "06:00:00.000Z",
+    II: "14:00:00.000Z",
+    III: "22:00:00.000Z",
+  };
+
+  // Ambil bagian jam dari date_start dalam format "HH:mm:ss.SSSZ"
+  let startTime = newDateStart.toISOString().split("T")[1];
+
+  if (shiftTimes[shift] && startTime === shiftTimes[shift]) {
+    newDateStart.setSeconds(newDateStart.getSeconds() + 1);
+  }
+  // -- End New Code --
 
   let pool;
   let transaction;
