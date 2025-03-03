@@ -1010,6 +1010,11 @@ app.post("/createStoppage", async (req, res) => {
     duration,
     group,
   } = req.body;
+
+  // Tambahkan 1 detik ke date_start
+  let newDateStart = new Date(date_start);
+  newDateStart.setSeconds(newDateStart.getSeconds() + 1);
+
   let pool;
   let transaction;
 
@@ -1018,7 +1023,7 @@ app.post("/createStoppage", async (req, res) => {
     const overlapCheck = await pool
       .request()
       .input("newEndTime", sql.DateTime, date_end)
-      .input("newStartTime", sql.DateTime, date_start)
+      .input("newStartTime", sql.DateTime, newDateStart) // Menggunakan newDateStart
       .input("line", sql.VarChar, line).query(`
         SELECT * FROM dbo.tb_reasonDowntime
         WHERE 
@@ -1049,7 +1054,7 @@ app.post("/createStoppage", async (req, res) => {
     console.log("Truncated date:", truncatedDate);
     const resultReason = await transaction
       .request()
-      .input("date_start", sql.DateTime, date_start) // pake method getdate() kalau bisa
+      .input("date_start", sql.DateTime, newDateStart) // Menggunakan newDateStart
       .input("date_month", sql.VarChar, date_month) // pisahkan dari date_start
       .input("date_week", sql.VarChar, date_week) // pakai date.getWeek()
       .input("shift", sql.VarChar, shift) // get shift based on date_start
@@ -1138,7 +1143,7 @@ app.post("/createStoppage", async (req, res) => {
         .input("No", sql.VarChar, table2Data.combined)
         .input("Week", sql.VarChar, date_week)
         .input("Week2", sql.VarChar, date_week)
-        .input("Tanggal", sql.DateTime, date_start)
+        .input("Tanggal", sql.DateTime, newDateStart) // Menggunakan newDateStart
         .input("TypeDowntime", sql.VarChar, table2Data.typeDowntime)
         .input("Downtime", sql.VarChar, duration.toString()).query(`
               INSERT INTO dbo.tb_filling_downtime_all2 (
