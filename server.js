@@ -535,7 +535,7 @@ app.post("/getAllPOShift", async (req, res) => {
       .input("line", sql.VarChar, line)
       .input("start", sql.DateTime, date_start)
       .input("end", sql.DateTime, date_end)
-      .query(`SELECT PO.id, P.sku, PO.qty, PO.date_start, PO.date_end, PO.status, PO.actual_start, PO.actual_end, PO.plant, PO.line
+      .query(`SELECT PO.id, PO.product_id, P.sku, PO.qty, PO.date_start, PO.date_end, PO.status, PO.actual_start, PO.actual_end, PO.plant, PO.line
       FROM ProductionOrder PO
       INNER JOIN Product P
         ON PO.product_id = P.id
@@ -2208,6 +2208,46 @@ app.get("/getCatProd/:cat", async (req, res) => {
     res.status(200).json(result.recordset);
   } catch (error) {
     console.error(error);
+  }
+});
+
+app.get("/getProducts", async (req, res) => {
+  const { ids } = req.query; // Ambil query parameter 'ids'
+
+  if (!ids) {
+    return res.status(400).json({ error: "Product IDs are required" });
+  }
+
+  // Ubah string "1,2,3" menjadi array angka [1, 2, 3]
+  const idArray = ids
+    .split(",")
+    .map((id) => parseInt(id.trim()))
+    .filter(Boolean);
+
+  try {
+    let pool = await sql.connect(config);
+
+    // Pastikan array tidak kosong sebelum menjalankan query
+    if (idArray.length === 0) {
+      return res.status(400).json({ error: "Invalid Product IDs" });
+    }
+
+    // Gunakan parameterized query untuk keamanan
+    const request = pool.request();
+    idArray.forEach((id, index) => {
+      request.input(`id${index}`, sql.Int, id);
+    });
+
+    const query = `SELECT id, sku, speed FROM Product WHERE id IN (${idArray
+      .map((_, i) => `@id${i}`)
+      .join(",")})`;
+    const result = await request.query(query);
+    console.log("Retrieved Products:", result.recordset);
+
+    res.status(200).json(result.recordset);
+  } catch (error) {
+    console.error("Error fetching products:", error);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
