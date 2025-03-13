@@ -10,7 +10,7 @@ app.use(express.json());
 // API Route to get master data for Plant and Line
 app.get("/api/getPlantLine", async (req, res) => {
   try {
-    const apiUrl = "http://10.24.7.70:8080/getgreenTAGarea";
+    const apiUrl = "http://127.0.0.1:8080/getgreenTAGarea";
     if (!apiUrl) {
       console.error("URL_FETCH environment variable is not set.");
       return res.status(500).send("Server configuration error");
@@ -75,7 +75,7 @@ app.post("/createPO", async (req, res) => {
     const month = time.getMonth() + 1;
 
     const apiResponse = await fetch(
-      `http://10.24.7.70:8080/getProcessOrderSAP/${year}/${month}/GF%20MILK`
+      `http://127.0.0.1:8080/getProcessOrderSAP/${year}/${month}/GF%20MILK`
     );
     const allData = await apiResponse.json();
     const record = allData.find((item) => item["NO PROCESS ORDER"] === id);

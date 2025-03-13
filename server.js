@@ -10,7 +10,7 @@ app.use(express.json());
 // API Route to get master data for Plant and Line
 app.get("/api/getPlantLine", async (req, res) => {
   try {
-    const apiUrl = "http://10.24.7.70:8080/getgreenTAGarea";
+    const apiUrl = "http://127.0.0.1:8080/getgreenTAGarea";
     if (!apiUrl) {
       console.error("URL_FETCH environment variable is not set.");
       return res.status(500).send("Server configuration error");
@@ -47,7 +47,26 @@ app.get("/api/getPlantLine", async (req, res) => {
       ).values()
     );
 
-    const finalData = uniqueProcessingItems.concat(uniqueFillingItems);
+    const uniqueYogurtItems = Array.from(
+      new Map(
+        selectedData
+          .filter((item) => item.plant === "Yogurt")
+          .map((item) => [item.line, item])
+      ).values()
+    );
+
+    const uniqueCheeseItems = Array.from(
+      new Map(
+        selectedData
+          .filter((item) => item.plant === "Cheese")
+          .map((item) => [item.line, item])
+      ).values()
+    );
+
+    const finalData = uniqueProcessingItems
+      .concat(uniqueFillingItems)
+      .concat(uniqueYogurtItems)
+      .concat(uniqueCheeseItems);
     res.json(finalData);
   } catch (error) {
     console.error(error);
@@ -55,18 +74,26 @@ app.get("/api/getPlantLine", async (req, res) => {
   }
 });
 
-const { formatDateTime, getOrCreateProduct } = require("./modules");
+const {
+  formatDateTime,
+  getOrCreateProduct,
+  getTableName,
+  getProductionName,
+} = require("./modules");
 
 // insert PO from SAP to local database
 app.post("/createPO", async (req, res) => {
-  const { id, date, line, group } = req.body;
+  const { id, date, line, group, plant } = req.body;
 
   try {
     const pool = await sql.connect(config);
     const groupResult = await pool
       .request()
       .input("group", sql.VarChar, group)
-      .query("SELECT id FROM GroupMaster WHERE [group] = @group;");
+      .input("plant", sql.VarChar, plant)
+      .query(
+        "SELECT id FROM GroupMaster WHERE [group] = @group AND plant = @plant;"
+      );
 
     const groupId = groupResult.recordset[0]?.id;
 
@@ -74,9 +101,16 @@ app.post("/createPO", async (req, res) => {
     const year = time.getFullYear();
     const month = time.getMonth() + 1;
 
-    const apiResponse = await fetch(
-      `http://10.24.7.70:8080/getProcessOrderSAP/${year}/${month}/GF%20MILK`
-    );
+    const sapUrl =
+      plant === "Milk Processing"
+        ? `http://127.0.0.1:8080/getProcessOrderSAP/${year}/${month}/SFP%20ESL/SFP%20UHT`
+        : plant === "Yogurt"
+        ? `http://127.0.0.1:8080/getProcessOrderSAP/${year}/${month}/YOGURT`
+        : plant === "Cheese"
+        ? `http://127.0.0.1:8080/getProcessOrderSAP/${year}/${month}/MOZZ/RICOTTA`
+        : `http://127.0.0.1:8080/getProcessOrderSAP/${year}/${month}/GF%20MILK`;
+
+    const apiResponse = await fetch(sapUrl);
     const allData = await apiResponse.json();
     const record = allData.find((item) => item["NO PROCESS ORDER"] === id);
 
@@ -169,7 +203,7 @@ app.post("/createPO", async (req, res) => {
       message: "Successfully inserted PO from SAP to local database",
     });
   } catch (error) {
-    console.error("Error occurred:", error.message);
+    console.error("Error create PO:", error.message);
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
@@ -819,10 +853,13 @@ app.post("/updatePO", async (req, res) => {
 
 // API Route to get Downtime for certain Line and Shift
 app.post("/getAllStoppages", async (req, res) => {
-  const { line, date_start, date_end } = req.body;
+  const { line, date_start, date_end, plant } = req.body;
   try {
     // Connect to the database
     let pool = await sql.connect(config);
+
+    // table name based on plant
+    const tableName = getTableName(plant);
 
     // Run the query
     const result = await pool
@@ -856,9 +893,9 @@ app.post("/getAllStoppages", async (req, res) => {
                     rd.Keterangan 
                     ORDER BY fd.datesystem DESC) AS rn
             FROM dbo.tb_reasonDowntime rd
-            JOIN dbo.tb_filling_downtime_all2 fd
+            JOIN dbo.${tableName} fd
             ON CONVERT(DATE, fd.Tanggal) = CONVERT(DATE, rd.Date)
-            AND SUBSTRING(fd.No, 1, 1) = SUBSTRING(rd.Line, 6, 1)
+     
             AND fd.TypeDowntime LIKE CONCAT('%', rd.Jenis, '%')
             WHERE rd.Date >= @start
             AND rd.Date < @end
@@ -1009,7 +1046,24 @@ app.post("/createStoppage", async (req, res) => {
     comments,
     duration,
     group,
+    plant,
   } = req.body;
+
+  // upperCase the line name
+  const uppercasedLine = line.toUpperCase();
+
+  // update plant name
+  const updatedPlant =
+    plant === "Milk Processing"
+      ? "Processing"
+      : plant === "Yogurt"
+      ? "Yogurt"
+      : plant === "Cheese"
+      ? "Cheese"
+      : "Filling";
+
+  // table name based on plant
+  const tableName = getTableName(plant);
 
   // -- New Code --
   // Konversi date_start menjadi objek Date
@@ -1039,7 +1093,7 @@ app.post("/createStoppage", async (req, res) => {
       .request()
       .input("newEndTime", sql.DateTime, date_end)
       .input("newStartTime", sql.DateTime, newDateStart) // Menggunakan newDateStart
-      .input("line", sql.VarChar, line).query(`
+      .input("line", sql.VarChar, uppercasedLine).query(`
         SELECT * FROM dbo.tb_reasonDowntime
         WHERE 
           Date < @newEndTime
@@ -1059,7 +1113,7 @@ app.post("/createStoppage", async (req, res) => {
     truncatedDate.setHours(0, 0, 0, 0); // Ensure time is reset to midnight
     const table2Data = parseTableFillingValues(
       date_start,
-      line,
+      uppercasedLine,
       machine,
       code,
       date_week,
@@ -1069,12 +1123,13 @@ app.post("/createStoppage", async (req, res) => {
     console.log("Truncated date:", truncatedDate);
     const resultReason = await transaction
       .request()
+      .input("unit", sql.VarChar, updatedPlant) // untuk unit menggunakan updated plant name
       .input("date_start", sql.DateTime, newDateStart) // Menggunakan newDateStart
       .input("date_month", sql.VarChar, date_month) // pisahkan dari date_start
       .input("date_week", sql.VarChar, date_week) // pakai date.getWeek()
       .input("shift", sql.VarChar, shift) // get shift based on date_start
       .input("group", sql.VarChar, group)
-      .input("line", sql.VarChar, line) // ambil dari value params
+      .input("line", sql.VarChar, uppercasedLine) // ambil dari value params
       .input("category", sql.VarChar, code) // selection from radio button
       .input("machine", sql.VarChar, machine) // machine atau downtime yang dipilih di awal
       .input("type", sql.VarChar, type) // yang dipilih setelah memilih machine atau downtime
@@ -1096,7 +1151,7 @@ app.post("/createStoppage", async (req, res) => {
               ,Keterangan
               ,Minutes)
               VALUES 
-              ('Filling'
+              (@unit
               ,''
               ,@date_start
               ,@date_month
@@ -1126,8 +1181,8 @@ app.post("/createStoppage", async (req, res) => {
       .request()
       .input("Downtime", sql.VarChar, `%${code}%`)
       .input("DateOnly", sql.DateTime, truncatedDate)
-      .input("No", sql.VarChar, `${table2Data.line}%`).query(`
-              SELECT No, Week, Tanggal, Downtime, TypeDowntime FROM dbo.tb_filling_downtime_all2
+      .input("No", sql.VarChar, `${table2Data.uppercasedLine}%`).query(`
+              SELECT No, Week, Tanggal, Downtime, TypeDowntime FROM dbo.${tableName}
               WHERE TypeDowntime LIKE @Downtime
               AND CONVERT(date, Tanggal) = @DateOnly
               AND No LIKE @No;
@@ -1142,9 +1197,9 @@ app.post("/createStoppage", async (req, res) => {
         .input("UpdatedDowntime", sql.VarChar, newDuration.toString())
         .input("EntryTanggal", sql.DateTime, truncatedDate)
         .input("Downtime", sql.VarChar, `%${code}%`)
-        .input("No", sql.VarChar, `${table2Data.line}%`)
+        .input("No", sql.VarChar, `${table2Data.uppercasedLine}%`)
         .input("id", sql.VarChar, `${table2Data.id}`).query(`
-                  UPDATE dbo.tb_filling_downtime_all2
+                  UPDATE dbo.${tableName}
                   SET Downtime = @UpdatedDowntime 
                   WHERE CONVERT(date, Tanggal) = @EntryTanggal
                   AND TypeDowntime LIKE @Downtime
@@ -1161,7 +1216,7 @@ app.post("/createStoppage", async (req, res) => {
         .input("Tanggal", sql.DateTime, newDateStart) // Menggunakan newDateStart
         .input("TypeDowntime", sql.VarChar, table2Data.typeDowntime)
         .input("Downtime", sql.VarChar, duration.toString()).query(`
-              INSERT INTO dbo.tb_filling_downtime_all2 (
+              INSERT INTO dbo.${tableName} (
               ID
               ,No
               ,Week
@@ -1217,13 +1272,16 @@ app.put("/updateStoppage", async (req, res) => {
     code,
     comments,
     duration,
-    group,
+    plant,
   } = req.body;
   let pool;
   let transaction;
 
   try {
     pool = await sql.connect(config);
+
+    // table name based on plant
+    const tableName = getTableName(plant);
 
     let currentDowntime = 0;
 
@@ -1275,7 +1333,7 @@ app.put("/updateStoppage", async (req, res) => {
       .input("Downtime", sql.VarChar, `%${code}%`)
       .input("DateOnly", sql.DateTime, truncatedDate)
       .input("No", sql.VarChar, `${table2Data.line}%`).query(`
-              SELECT No, Week, Tanggal, Downtime, TypeDowntime FROM dbo.tb_filling_downtime_all2
+              SELECT No, Week, Tanggal, Downtime, TypeDowntime FROM dbo.${tableName}
               WHERE TypeDowntime LIKE @Downtime
               AND CONVERT(date, Tanggal) = @DateOnly
               AND No LIKE @No;
@@ -1292,7 +1350,7 @@ app.put("/updateStoppage", async (req, res) => {
         .input("Downtime", sql.VarChar, `%${code}%`)
         .input("No", sql.VarChar, `${table2Data.line}%`)
         .input("id", sql.VarChar, `${table2Data.id}`).query(`
-                  UPDATE dbo.tb_filling_downtime_all2
+                  UPDATE dbo.${tableName}
                   SET Downtime = @UpdatedDowntime 
                   WHERE CONVERT(date, Tanggal) = @EntryTanggal
                   AND TypeDowntime LIKE @Downtime
@@ -1318,10 +1376,14 @@ app.put("/updateStoppage", async (req, res) => {
 
 // API Route to remove downtime
 app.post("/deleteStoppage", async (req, res) => {
-  const { id } = req.body;
+  const { id, plant } = req.body;
 
   try {
     const pool = await sql.connect(config);
+
+    // table name based on plant
+    const tableName = getTableName(plant);
+
     const statusResult = await pool
       .request()
       .input("id", sql.Int, id)
@@ -1350,7 +1412,7 @@ app.post("/deleteStoppage", async (req, res) => {
         .input("Downtime", sql.VarChar, `%${stoppageDetails.Jenis}%`)
         .input("DateOnly", sql.DateTime, truncatedDate)
         .input("No", sql.VarChar, `${parsedLine.line}%`).query(`
-              SELECT No, Week, Tanggal, Downtime, TypeDowntime FROM dbo.tb_filling_downtime_all2
+              SELECT No, Week, Tanggal, Downtime, TypeDowntime FROM dbo.${tableName}
               WHERE TypeDowntime LIKE @Downtime
               AND CONVERT(date, Tanggal) = @DateOnly
               AND No LIKE @No;
@@ -1381,7 +1443,7 @@ app.post("/deleteStoppage", async (req, res) => {
           .input("Downtime", sql.VarChar, `%${stoppageDetails.Jenis}%`)
           .input("No", sql.VarChar, `${parsedLine.line}%`)
           .input("id", sql.VarChar, `${parsedLine.id}`).query(`
-                  UPDATE dbo.tb_filling_downtime_all2
+                  UPDATE dbo.${tableName}
                   SET Downtime = @UpdatedDowntime 
                   WHERE CONVERT(date, Tanggal) = @EntryTanggal
                   AND TypeDowntime LIKE @Downtime
@@ -1430,7 +1492,7 @@ app.get("/getDowntimeType/:cat/:line", async (req, res) => {
   try {
     let pool = await sql.connect(config);
 
-    const lineInitial = line.charAt(5).toUpperCase();
+    const lineInitial = line.toUpperCase();
 
     const result = await pool
       .request()
@@ -1449,28 +1511,35 @@ app.get("/getDowntimeType/:cat/:line", async (req, res) => {
 const { parseLine } = require("./modules");
 
 app.post("/insertQuantity", async (req, res) => {
-  const { qty, line, startTime, date_week, group } = req.body;
+  const { qty, line, startTime, date_week, group, plant } = req.body;
   // console.log("Received Data: \n", qty, line, startTime, date_week, group);
 
   let pool;
   let result;
   try {
     pool = await sql.connect(config);
+
+    // table name based on plant
+    const tableName = getTableName(plant);
+
+    // production name based on plant
+    const productionName = getProductionName(plant);
+
     const parsedDateStart = new Date(startTime);
     if (isNaN(parsedDateStart)) {
       return res.status(400).json({ message: "Invalid date_start" });
     }
 
-    const parsedLine = parseLine(line, parsedDateStart, date_week);
+    const parsedLine = parseLine(line, parsedDateStart, date_week, plant);
 
     const goodValue = qty ? qty.toString() : "0";
     const existingEntry = await pool
       .request()
       .input("DateOnly", sql.DateTime, parsedDateStart)
       .input("No", sql.VarChar, `${parsedLine.line}%`).query(`
-              SELECT No, Week, Tanggal, Downtime, TypeDowntime FROM dbo.tb_filling_downtime_all2
+              SELECT No, Week, Tanggal, Downtime, TypeDowntime FROM dbo.${tableName}
               WHERE Tanggal = @DateOnly
-              AND TypeDowntime LIKE '%good%'
+              AND TypeDowntime LIKE '%${productionName}%'
               AND No LIKE @No;
           `);
 
@@ -1480,10 +1549,10 @@ app.post("/insertQuantity", async (req, res) => {
         .input("UpdatedQuantity", sql.VarChar, goodValue)
         .input("DateOnly", sql.DateTime, parsedDateStart)
         .input("No", sql.VarChar, `${parsedLine.line}%`)
-        .query(`UPDATE dbo.tb_filling_downtime_all2
+        .query(`UPDATE dbo.${tableName}
                   SET Downtime = @UpdatedQuantity 
                   WHERE Tanggal = @DateOnly
-                  AND TypeDowntime LIKE '%good%'
+                  AND TypeDowntime LIKE '%${productionName}%'
                   AND No LIKE @No
             `);
     } else {
@@ -1495,8 +1564,8 @@ app.post("/insertQuantity", async (req, res) => {
         .input("Week2", sql.VarChar, date_week)
         .input("Tanggal", sql.DateTime, parsedDateStart)
         .input("good", sql.VarChar, goodValue)
-        .input("group", sql.VarChar, `${group}.Finish Good (Pcs)`)
-        .query(`INSERT INTO dbo.tb_filling_downtime_all2 (
+        .input("group", sql.VarChar, `${group}.${productionName}`)
+        .query(`INSERT INTO dbo.${tableName} (
                 ID
                 ,No
                 ,Week
@@ -1531,12 +1600,15 @@ app.post("/insertQuantity", async (req, res) => {
 });
 
 app.post("/insertSpeedLoss", async (req, res) => {
-  const { speed, nominal, line, startTime, date_week, group } = req.body;
+  const { speed, nominal, line, startTime, date_week, group, plant } = req.body;
   // console.log("Received Data: \n", speed, line, startTime, date_week, group);
 
   let pool;
   try {
     pool = await sql.connect(config);
+
+    // table name based on plant
+    const tableName = getTableName(plant);
 
     const parsedDateStart = new Date(startTime);
     if (isNaN(parsedDateStart)) {
@@ -1558,7 +1630,7 @@ app.post("/insertSpeedLoss", async (req, res) => {
         .input("DateOnly", sql.DateTime, parsedDateStart)
         .input("No", sql.VarChar, `${parsedLine.line}%`)
         .input("TypeDowntime", sql.VarChar, `%${type}%`).query(`
-          SELECT Downtime FROM dbo.tb_filling_downtime_all2
+          SELECT Downtime FROM dbo.${tableName}
           WHERE Tanggal = @DateOnly
           AND TypeDowntime LIKE @TypeDowntime
           AND No LIKE @No;
@@ -1572,7 +1644,7 @@ app.post("/insertSpeedLoss", async (req, res) => {
           .input("No", sql.VarChar, `${parsedLine.line}%`)
           .input("TypeDowntime", sql.VarChar, `%${type}%`)
           .input("Type", sql.VarChar, `${group}.${type}`).query(`
-              UPDATE dbo.tb_filling_downtime_all2
+              UPDATE dbo.${tableName}
               SET Downtime = @NewDowntime, 
                   TypeDowntime = @Type
               WHERE Tanggal = @DateOnly
@@ -1589,7 +1661,7 @@ app.post("/insertSpeedLoss", async (req, res) => {
           .input("Tanggal", sql.DateTime, parsedDateStart)
           .input("Value", sql.VarChar, value.toString())
           .input("TypeDowntime", sql.VarChar, `${group}.${type}`).query(`
-              INSERT INTO dbo.tb_filling_downtime_all2 (
+              INSERT INTO dbo.${tableName} (
                 ID
                 ,No
                 ,Week
@@ -1686,28 +1758,22 @@ app.post("/insertQualLoss", async (req, res) => {
     startTime,
     date_week,
     group,
+    plant,
   } = req.body;
-  console.log(
-    "Received Data: \n",
-    filling,
-    packing,
-    sample,
-    quality,
-    line,
-    startTime,
-    date_week,
-    group
-  );
 
   let pool;
   try {
     pool = await sql.connect(config);
+
+    // table name based on plant
+    const tableName = getTableName(plant);
+
     const parsedDateStart = new Date(startTime);
     if (isNaN(parsedDateStart.getTime())) {
       return res.status(400).json({ message: "Invalid date_start" });
     }
 
-    const parsedLine = parseLine(line, parsedDateStart, date_week);
+    const parsedLine = parseLine(line, parsedDateStart, date_week, plant);
 
     const fillingValue = filling ? filling.toString() : "0";
     const packingValue = packing ? packing.toString() : "0";
@@ -1723,7 +1789,7 @@ app.post("/insertQualLoss", async (req, res) => {
         .input("DateOnly", sql.DateTime, parsedDateStart)
         .input("No", sql.VarChar, `${parsedLine.line}%`)
         .input("TypeDowntime", sql.VarChar, `%${type}%`).query(`
-          SELECT Downtime FROM dbo.tb_filling_downtime_all2
+          SELECT Downtime FROM dbo.${tableName}
           WHERE Tanggal = @DateOnly
           AND TypeDowntime LIKE @TypeDowntime
           AND No LIKE @No;
@@ -1738,7 +1804,7 @@ app.post("/insertQualLoss", async (req, res) => {
           .input("No", sql.VarChar, `${parsedLine.line}%`)
           .input("TypeDowntime", sql.VarChar, `%${type}%`)
           .input("Type", sql.VarChar, `${group}.${type}`).query(`
-              UPDATE dbo.tb_filling_downtime_all2
+              UPDATE dbo.${tableName}
               SET Downtime = @NewDowntime, 
                   TypeDowntime = @Type
               WHERE Tanggal = @DateOnly
@@ -1755,7 +1821,7 @@ app.post("/insertQualLoss", async (req, res) => {
           .input("Tanggal", sql.DateTime, parsedDateStart)
           .input("Value", sql.VarChar, value.toString())
           .input("TypeDowntime", sql.VarChar, `${group}.${type}`).query(`
-              INSERT INTO dbo.tb_filling_downtime_all2 (
+              INSERT INTO dbo.${tableName} (
                 ID
                 ,No
                 ,Week
@@ -1812,17 +1878,22 @@ app.post("/insertPerformance", async (req, res) => {
     date_week,
     line,
     group,
+    plant,
   } = req.body;
 
   let pool;
   try {
     pool = await sql.connect(config);
+
+    // table name based on plant
+    const tableName = getTableName(plant);
+
     const parsedDateStart = new Date(startTime);
     if (isNaN(parsedDateStart.getTime())) {
       return res.status(400).json({ message: "Invalid date_start" });
     }
 
-    const parsedLine = parseLine(line, parsedDateStart, date_week);
+    const parsedLine = parseLine(line, parsedDateStart, date_week, plant);
 
     const netValue = net ? net.toString() : "0";
     const runningValue = running ? running.toString() : "0";
@@ -1855,7 +1926,7 @@ app.post("/insertPerformance", async (req, res) => {
           .input("DateOnly", sql.DateTime, parsedDateStart)
           .input("No", sql.VarChar, `${parsedLine.line}%`)
           .input("TypeDowntime", sql.VarChar, `%${type}%`).query(`
-          SELECT Downtime FROM dbo.tb_filling_downtime_all2
+          SELECT Downtime FROM dbo.${tableName}
           WHERE Tanggal = @DateOnly
           AND TypeDowntime LIKE @TypeDowntime
           AND No LIKE @No;
@@ -1866,7 +1937,7 @@ app.post("/insertPerformance", async (req, res) => {
           .input("DateOnly", sql.DateTime, parsedDateStart)
           .input("No", sql.VarChar, `${parsedLine.line}%`)
           .input("TypeDowntime", sql.VarChar, `%${type}%`).query(`
-          SELECT Downtime FROM dbo.tb_filling_downtime_all2
+          SELECT Downtime FROM dbo.${tableName}
           WHERE Tanggal = @DateOnly
           AND TypeDowntime LIKE @TypeDowntime
           AND No LIKE @No;
@@ -1882,7 +1953,7 @@ app.post("/insertPerformance", async (req, res) => {
             .input("No", sql.VarChar, `${parsedLine.line}%`)
             .input("TypeDowntime", sql.VarChar, `%${type}%`)
             .input("Type", sql.VarChar, `${type}`).query(`
-              UPDATE dbo.tb_filling_downtime_all2
+              UPDATE dbo.${tableName}
               SET Downtime = @NewDowntime,
               TypeDowntime = @Type
               WHERE Tanggal = @DateOnly
@@ -1897,7 +1968,7 @@ app.post("/insertPerformance", async (req, res) => {
             .input("No", sql.VarChar, `${parsedLine.line}%`)
             .input("TypeDowntime", sql.VarChar, `%${type}%`)
             .input("Type", sql.VarChar, `${group}.${type}`).query(`
-              UPDATE dbo.tb_filling_downtime_all2
+              UPDATE dbo.${tableName}
               SET Downtime = @NewDowntime,
               TypeDowntime = @Type
               WHERE Tanggal = @DateOnly
@@ -1916,7 +1987,7 @@ app.post("/insertPerformance", async (req, res) => {
             .input("Tanggal", sql.DateTime, parsedDateStart)
             .input("Value", sql.VarChar, value.toString())
             .input("TypeDowntime", sql.VarChar, `${type}`).query(`
-              INSERT INTO dbo.tb_filling_downtime_all2 (
+              INSERT INTO dbo.${tableName} (
                 ID
                 ,No
                 ,Week
@@ -1945,7 +2016,7 @@ app.post("/insertPerformance", async (req, res) => {
             .input("Tanggal", sql.DateTime, parsedDateStart)
             .input("Value", sql.VarChar, value.toString())
             .input("TypeDowntime", sql.VarChar, `${group}.${type}`).query(`
-              INSERT INTO dbo.tb_filling_downtime_all2 (
+              INSERT INTO dbo.${tableName} (
                 ID
                 ,No
                 ,Week
@@ -1979,7 +2050,7 @@ app.post("/insertPerformance", async (req, res) => {
     await upsertData("NOT REPORTED", nReportedValue);
     await upsertData("UT-No PO", utValue);
   } catch (error) {
-    console.error("Insertion of performance data failed", error);
+    console.error("Insertion of performance data failed", error.message);
 
     res
       .status(500)
@@ -1990,9 +2061,13 @@ app.post("/insertPerformance", async (req, res) => {
 });
 
 app.post("/getQualityLoss", async (req, res) => {
-  const { line, date_start, date_end } = req.body;
+  const { line, date_start, date_end, plant } = req.body;
   try {
     let pool = await sql.connect(config);
+
+    // table name based on plant
+    const tableName = getTableName(plant);
+
     const parsedDateStart = new Date(date_start);
     if (isNaN(parsedDateStart)) {
       return res.status(400).json({ message: "Invalid date_start" });
@@ -2014,7 +2089,7 @@ app.post("/getQualityLoss", async (req, res) => {
       .input("line", sql.VarChar, `${lineInitial}%`)
       .input("start", sql.DateTime, parsedDateStart)
       .input("end", sql.DateTime, parsedDateEnd)
-      .query(`SELECT Downtime FROM dbo.tb_filling_downtime_all2 
+      .query(`SELECT Downtime FROM dbo.${tableName}
       WHERE TypeDowntime LIKE '%Quality%' 
       AND No LIKE @line
       AND Tanggal >= @start
@@ -2031,9 +2106,13 @@ app.post("/getQualityLoss", async (req, res) => {
 });
 
 app.post("/getRejectSample", async (req, res) => {
-  const { line, date_start, date_end } = req.body;
+  const { line, date_start, date_end, plant } = req.body;
   try {
     let pool = await sql.connect(config);
+
+    // table name based on plant
+    const tableName = getTableName(plant);
+
     const parsedDateStart = new Date(date_start);
     if (isNaN(parsedDateStart)) {
       return res.status(400).json({ message: "Invalid date_start" });
@@ -2055,9 +2134,13 @@ app.post("/getRejectSample", async (req, res) => {
       .input("line", sql.VarChar, `${lineInitial}%`)
       .input("start", sql.DateTime, parsedDateStart)
       .input("end", sql.DateTime, parsedDateEnd)
-      .query(`SELECT Downtime FROM dbo.tb_filling_downtime_all2 
+      .query(`SELECT Downtime FROM dbo.${tableName}
       WHERE (TypeDowntime LIKE '%reject%'
-      OR TypeDowntime LIKE '%sample%')
+      OR TypeDowntime LIKE '%sample%'
+      OR TypeDowntime LIKE '%BLOW AWAL%'
+      OR TypeDowntime LIKE '%DRAIN AKHIR%'
+      OR TypeDowntime LIKE '%SIRKULASI%'
+      OR TypeDowntime LIKE '%UNPLANNED CIP%')
       AND No LIKE @line
       AND Tanggal >= @start
       AND Tanggal < @end
@@ -2073,10 +2156,14 @@ app.post("/getRejectSample", async (req, res) => {
 });
 
 app.post("/getSpeedLoss", async (req, res) => {
-  const { line, date_start, date_end } = req.body;
+  const { line, date_start, date_end, plant } = req.body;
 
   try {
     let pool = await sql.connect(config);
+
+    // table name based on plant
+    const tableName = getTableName(plant);
+
     const parsedDateStart = new Date(date_start);
     if (isNaN(parsedDateStart)) {
       return res.status(400).json({ message: "Invalid date_start" });
@@ -2098,7 +2185,7 @@ app.post("/getSpeedLoss", async (req, res) => {
       .input("line", sql.VarChar, `${lineInitial}%`)
       .input("start", sql.DateTime, parsedDateStart)
       .input("end", sql.DateTime, parsedDateEnd)
-      .query(`SELECT Downtime FROM dbo.tb_filling_downtime_all2 
+      .query(`SELECT Downtime FROM dbo.${tableName} 
       WHERE TypeDowntime LIKE '%LOSS SPEED%' 
       AND No LIKE @line
       AND Tanggal >= @start
@@ -2155,10 +2242,17 @@ app.post("/getNominalSpeed", async (req, res) => {
 });
 
 app.post("/getQuantity", async (req, res) => {
-  const { line, date_start, date_end } = req.body;
+  const { line, date_start, date_end, plant } = req.body;
 
   try {
     let pool = await sql.connect(config);
+
+    // table name based on plant
+    const tableName = getTableName(plant);
+
+    // production name based on plant
+    const productionName = getProductionName(plant);
+
     const parsedDateStart = new Date(date_start);
     if (isNaN(parsedDateStart)) {
       return res.status(400).json({ message: "Invalid date_start" });
@@ -2180,8 +2274,8 @@ app.post("/getQuantity", async (req, res) => {
       .input("line", sql.VarChar, `${lineInitial}%`)
       .input("start", sql.DateTime, parsedDateStart)
       .input("end", sql.DateTime, parsedDateEnd)
-      .query(`SELECT Downtime FROM dbo.tb_filling_downtime_all2 
-      WHERE TypeDowntime LIKE '%Good%' 
+      .query(`SELECT Downtime FROM dbo.${tableName} 
+      WHERE TypeDowntime LIKE '%${productionName}%'
       AND No LIKE @line
       AND Tanggal >= @start
       AND Tanggal < @end
