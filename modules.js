@@ -1,6 +1,14 @@
 const sql = require("mssql");
 
-function parseTableFillingValues(date_start, line, machine, code, week, group) {
+function parseTableFillingValues(
+  date_start,
+  line,
+  machine,
+  code,
+  week,
+  group,
+  plant
+) {
   let fillingMachine;
 
   if (typeof date_start === "string") {
@@ -20,8 +28,22 @@ function parseTableFillingValues(date_start, line, machine, code, week, group) {
 
   const type = `${groupInitial}.${fillingMachine}.${code}`;
 
+  let lineInitial;
+
+  if (plant === "Milk Processing") {
+    const mapping = {
+      "FLEX 1": "A",
+      "FLEX 2": "B",
+      "GEA 3": "C",
+      "GEA 4": "D",
+      "GEA 5": "E",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else {
+    lineInitial = line.charAt(5).toUpperCase();
+  }
+
   // Combine line name initials and date day for another column
-  const lineInitial = line.charAt(5).toUpperCase(); // "A" from "Line A"
   const dateDay = date_start.getDate().toString().padStart(2, "0"); // "28" from "2024-09-28"
   const dateMonth = date_start.getMonth() + 1;
   const dateYear = date_start.getFullYear();
@@ -55,8 +77,43 @@ function parseLine(line, date_start, week, plant) {
   return { combined: No, id: id, line: lineInitial };
 }
 
-function parseLineDowntime(line, date_start, week) {
-  const lineInitial = line.charAt(5).toUpperCase();
+function parseLineSpeedLoss(line, date_start, plant) {
+  let lineInitial;
+
+  if (plant === "Milk Processing") {
+    const mapping = {
+      "Flex 1": "A",
+      "Flex 2": "B",
+      "GEA 3": "C",
+      "GEA 4": "D",
+      "GEA 5": "E",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else {
+    lineInitial = line.charAt(5).toUpperCase();
+  }
+
+  const dateDay = date_start.getDate().toString().padStart(2, "0");
+  const No = `${lineInitial}EG${dateDay}`; // Result: "ADG28"
+  return { combined: No };
+}
+
+function parseLineDowntime(line, date_start, week, plant) {
+  let lineInitial;
+
+  if (plant === "Milk Processing") {
+    const mapping = {
+      "Flex 1": "A",
+      "Flex 2": "B",
+      "GEA 3": "C",
+      "GEA 4": "D",
+      "GEA 5": "E",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else {
+    lineInitial = line.charAt(5).toUpperCase();
+  }
+
   const dateDay = date_start.getDate().toString().padStart(2, "0");
   const dateMonth = date_start.getMonth() + 1;
   const dateYear = date_start.getFullYear();
@@ -440,6 +497,7 @@ module.exports = {
   parseTableFillingValues,
   parseLine,
   parseLineDowntime,
+  parseLineSpeedLoss,
   saveSplitOrders,
   getShift,
   getShiftEndTime,

@@ -79,6 +79,7 @@ const {
   getOrCreateProduct,
   getTableName,
   getProductionName,
+  parseLineSpeedLoss,
 } = require("./modules");
 
 // insert PO from SAP to local database
@@ -179,7 +180,7 @@ app.post("/createPO", async (req, res) => {
         id, product_id, qty, date_start, date_end, status, created_at, updated_at, actual_start, actual_end, plant, line, completion_count, [group]
       )
       VALUES (
-        @id, @product, @qty, @start, @end, 'Active', GETDATE(), GETDATE(), @actual, NULL, 'Milk Filling Packing', @line, 0, @group
+        @id, @product, @qty, @start, @end, 'Active', GETDATE(), GETDATE(), @actual, NULL, @plant, @line, 0, @group
       )
     `;
     const orderResult = await pool
@@ -192,6 +193,7 @@ app.post("/createPO", async (req, res) => {
       .input("actual", sql.DateTime, date)
       .input("line", sql.VarChar, line.toUpperCase())
       .input("group", sql.Int, groupId)
+      .input("plant", sql.VarChar, plant)
       .query(insertOrderQuery);
 
     if (orderResult.rowsAffected[0] === 0) {
@@ -994,8 +996,13 @@ app.get("/getDowntimeId/:id", async (req, res) => {
 });
 
 app.get("/getAllPerformance", async (req, res) => {
+  const { plant } = req.query;
+
   try {
     let pool = await sql.connect(config);
+
+    // table name based on plant
+    const tableName = getTableName(plant);
 
     const query = `
       SELECT
@@ -1013,7 +1020,7 @@ app.get("/getAllPerformance", async (req, res) => {
         MAX(CASE WHEN TypeDowntime LIKE '%process wait%' THEN Downtime ELSE NULL END) AS ProcessWaiting,
         MAX(CASE WHEN TypeDowntime LIKE '%quality%' THEN Downtime ELSE NULL END) AS QualityLoss, 
         MAX(CASE WHEN TypeDowntime LIKE '%speed%' THEN Downtime ELSE NULL END) AS SpeedLoss 
-      FROM dbo.tb_filling_downtime_all2
+      FROM dbo.${tableName}
       WHERE No LIKE '_E___'
       GROUP BY ID, Tanggal, LEFT(TypeDowntime, 1)
       order by Tanggal;`;
@@ -1117,7 +1124,8 @@ app.post("/createStoppage", async (req, res) => {
       machine,
       code,
       date_week,
-      group
+      group,
+      plant
     );
     console.log("Inserting date as local time:", date_start);
     console.log("Truncated date:", truncatedDate);
@@ -1304,7 +1312,7 @@ app.put("/updateStoppage", async (req, res) => {
     if (isNaN(dateStart)) {
       return res.status(400).json({ message: "Invalid date_start format" });
     }
-    const table2Data = parseLineDowntime(line, dateStart, date_week);
+    const table2Data = parseLineDowntime(line, dateStart, date_week, plant);
     console.log("Inserting date as local time:", date_start);
     console.log("Downtime Category: ", type);
     const resultReason = await transaction
@@ -1405,7 +1413,8 @@ app.post("/deleteStoppage", async (req, res) => {
       const parsedLine = parseLineDowntime(
         stoppageDetails.Line,
         stoppageDetails.Date,
-        stoppageDetails.Week
+        stoppageDetails.Week,
+        plant
       );
       const existingEntry = await pool
         .request()
@@ -1615,7 +1624,7 @@ app.post("/insertSpeedLoss", async (req, res) => {
       return res.status(400).json({ message: "Invalid date_start" });
     }
 
-    const parsedLine = parseLine(line, parsedDateStart, date_week);
+    const parsedLine = parseLine(line, parsedDateStart, date_week, plant);
 
     const speedValue = speed ? speed.toString() : "0";
     const nominalValue = nominal ? nominal.toString() : "0";
@@ -1700,33 +1709,36 @@ app.post("/insertSpeedLoss", async (req, res) => {
 });
 
 app.post("/deleteSpeedLoss", async (req, res) => {
-  const { startTime, line } = req.body;
+  const { startTime, line, plant } = req.body;
 
   let pool;
   try {
     pool = await sql.connect(config);
+
+    // table name based on plant
+    const tableName = getTableName(plant);
 
     const parsedDateStart = new Date(startTime);
     if (isNaN(parsedDateStart)) {
       return res.status(400).json({ message: "Invalid date_start" });
     }
 
-    const lineInitial = line.charAt(5).toUpperCase();
+    const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
     const statusResult = await pool
       .request()
       .input("date", sql.DateTime, parsedDateStart)
-      .input("line", sql.VarChar, `${lineInitial}E%`)
+      .input("line", sql.VarChar, `${lineInitial.combined}`)
       .query(
-        `SELECT * FROM [dbo].[tb_filling_downtime_all2] WHERE Tanggal = @date AND TypeDowntime LIKE '%SPEED%' AND No LIKE @line`
+        `SELECT * FROM [dbo].[${tableName}] WHERE Tanggal = @date AND TypeDowntime LIKE '%SPEED%' AND No LIKE @line`
       );
 
     if (statusResult.recordset.length > 0) {
       const result = await pool
         .request()
         .input("date", sql.DateTime, parsedDateStart)
-        .input("line", sql.VarChar, `${lineInitial}E%`)
+        .input("line", sql.VarChar, `${lineInitial.combined}`)
         .query(
-          `DELETE FROM [dbo].[tb_filling_downtime_all2] WHERE Tanggal = @date AND TypeDowntime LIKE '%SPEED%' AND No LIKE @line`
+          `DELETE FROM [dbo].[${tableName}] WHERE Tanggal = @date AND TypeDowntime LIKE '%SPEED%' AND No LIKE @line`
         );
       console.log("Delete result:", result);
       const rowsAffected = result.rowsAffected[0] || 0;
@@ -1748,12 +1760,44 @@ app.post("/deleteSpeedLoss", async (req, res) => {
   }
 });
 
+app.get("/getQualityLossProcessingMaster", async (req, res) => {
+  try {
+    const { sterilizer, tank, step } = req.query;
+
+    let pool = await sql.connect(config);
+    const qualityLoss = await pool
+      .request()
+      .input("sterilizer", sql.VarChar, sterilizer)
+      .input("tank", sql.VarChar, tank)
+      .input("step", sql.VarChar, step)
+      .query(
+        `SELECT * FROM dbo.QualityLossProcessingMaster WHERE Sterilizer = @sterilizer AND Tank = @tank AND Step = @step;`
+      );
+
+    if (qualityLoss.recordset.length > 0) {
+      res.status(200).json(qualityLoss.recordset[0]); // Mengambil objek pertama
+    } else {
+      res.status(404).json({ message: "Quality Loss not found" });
+    }
+  } catch (error) {
+    console.error("Fetching Quality Loss failed.", error);
+
+    res
+      .status(500)
+      .json({ message: "Internal Server Error", error: error.message });
+  }
+});
+
 app.post("/insertQualLoss", async (req, res) => {
   const {
-    filling,
-    packing,
-    sample,
-    quality,
+    filling = null,
+    packing = null,
+    sample = null,
+    quality = null,
+    blowAwal = null,
+    drainAkhir = null,
+    sirkulasi = null,
+    unplannedCip = null,
     line,
     startTime,
     date_week,
@@ -1775,15 +1819,22 @@ app.post("/insertQualLoss", async (req, res) => {
 
     const parsedLine = parseLine(line, parsedDateStart, date_week, plant);
 
-    const fillingValue = filling ? filling.toString() : "0";
-    const packingValue = packing ? packing.toString() : "0";
-    const sampleValue = sample ? sample.toString() : "0";
-    const qualityValue = quality ? quality.toString() : "0";
+    const convertValue = (value) => (value !== null ? value.toString() : "0");
+
+    const fillingValue = convertValue(filling);
+    const packingValue = convertValue(packing);
+    const sampleValue = convertValue(sample);
+    const qualityValue = convertValue(quality);
+    const blowAwalValue = convertValue(blowAwal);
+    const drainAkhirValue = convertValue(drainAkhir);
+    const sirkulasiValue = convertValue(sirkulasi);
+    const unplannedCipValue = convertValue(unplannedCip);
 
     const upsertData = async (type, value) => {
-      if (value === null || value === undefined || isNaN(parseFloat(value))) {
-        return; // Skip invalid or missing data
+      if (value === "0") {
+        return; // Skip jika value 0 atau tidak dikirim
       }
+
       const existingEntry = await pool
         .request()
         .input("DateOnly", sql.DateTime, parsedDateStart)
@@ -1795,22 +1846,22 @@ app.post("/insertQualLoss", async (req, res) => {
           AND No LIKE @No;
         `);
 
-      if (existingEntry.recordset && existingEntry.recordset.length > 0) {
+      if (existingEntry.recordset.length > 0) {
         // Update existing entry
         await pool
           .request()
-          .input("NewDowntime", sql.VarChar, value.toString())
+          .input("NewDowntime", sql.VarChar, value)
           .input("DateOnly", sql.DateTime, parsedDateStart)
           .input("No", sql.VarChar, `${parsedLine.line}%`)
           .input("TypeDowntime", sql.VarChar, `%${type}%`)
           .input("Type", sql.VarChar, `${group}.${type}`).query(`
-              UPDATE dbo.${tableName}
-              SET Downtime = @NewDowntime, 
-                  TypeDowntime = @Type
-              WHERE Tanggal = @DateOnly
-              AND TypeDowntime LIKE @TypeDowntime
-              AND No LIKE @No;
-            `);
+            UPDATE dbo.${tableName}
+            SET Downtime = @NewDowntime, 
+                TypeDowntime = @Type
+            WHERE Tanggal = @DateOnly
+            AND TypeDowntime LIKE @TypeDowntime
+            AND No LIKE @No;
+          `);
       } else {
         await pool
           .request()
@@ -1819,27 +1870,14 @@ app.post("/insertQualLoss", async (req, res) => {
           .input("Week", sql.VarChar, date_week)
           .input("Week2", sql.VarChar, date_week)
           .input("Tanggal", sql.DateTime, parsedDateStart)
-          .input("Value", sql.VarChar, value.toString())
+          .input("Value", sql.VarChar, value)
           .input("TypeDowntime", sql.VarChar, `${group}.${type}`).query(`
-              INSERT INTO dbo.${tableName} (
-                ID
-                ,No
-                ,Week
-                ,Week2
-                ,Tanggal
-                ,Downtime
-                ,TypeDowntime
-                ,datesystem) 
-              VALUES (
-                @id
-                ,@No
-                ,@Week
-                ,@Week2
-                ,@Tanggal
-                ,@Value
-                ,@TypeDowntime
-                ,GETDATE());
-            `);
+            INSERT INTO dbo.${tableName} (
+              ID, No, Week, Week2, Tanggal, Downtime, TypeDowntime, datesystem
+            ) VALUES (
+              @id, @No, @Week, @Week2, @Tanggal, @Value, @TypeDowntime, GETDATE()
+            );
+          `);
       }
     };
 
@@ -1847,13 +1885,17 @@ app.post("/insertQualLoss", async (req, res) => {
     await upsertData("Reject packing (Pcs)", packingValue);
     await upsertData("Sample (pcs)", sampleValue);
     await upsertData("Quality Losses", qualityValue);
+    await upsertData("BLOW AWAL", blowAwalValue);
+    await upsertData("DRAIN AKHIR", drainAkhirValue);
+    await upsertData("SIRKULASI", sirkulasiValue);
+    await upsertData("UNPLANNED CIP", unplannedCipValue);
+
     return res.json({
       message:
-        "Successfully updated or added Reject Filling, Reject Packing, Sample, and Quality Losses Data",
+        "Successfully updated or added data for Reject Filling, Reject Packing, Sample, Quality Losses, Blow Awal, Drain Akhir, Sirkulasi, and Unplanned CIP.",
     });
   } catch (error) {
     console.error("Insertion of Quality Loss related data failed", error);
-
     res
       .status(500)
       .json({ message: "Internal Server Error", error: error.message });
@@ -2082,11 +2124,11 @@ app.post("/getQualityLoss", async (req, res) => {
 
     console.log("Parsed Date End: ", parsedDateEnd);
 
-    const lineInitial = line.charAt(5).toUpperCase();
+    const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
 
     const result = await pool
       .request()
-      .input("line", sql.VarChar, `${lineInitial}%`)
+      .input("line", sql.VarChar, `${lineInitial.combined}`)
       .input("start", sql.DateTime, parsedDateStart)
       .input("end", sql.DateTime, parsedDateEnd)
       .query(`SELECT Downtime FROM dbo.${tableName}
@@ -2127,24 +2169,29 @@ app.post("/getRejectSample", async (req, res) => {
 
     console.log("Parsed Date End: ", parsedDateEnd);
 
-    const lineInitial = line.charAt(5).toUpperCase();
+    const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
 
     const result = await pool
       .request()
-      .input("line", sql.VarChar, `${lineInitial}%`)
+      .input("line", sql.VarChar, `${lineInitial.combined}`)
       .input("start", sql.DateTime, parsedDateStart)
-      .input("end", sql.DateTime, parsedDateEnd)
-      .query(`SELECT Downtime FROM dbo.${tableName}
-      WHERE (TypeDowntime LIKE '%reject%'
-      OR TypeDowntime LIKE '%sample%'
-      OR TypeDowntime LIKE '%BLOW AWAL%'
-      OR TypeDowntime LIKE '%DRAIN AKHIR%'
-      OR TypeDowntime LIKE '%SIRKULASI%'
-      OR TypeDowntime LIKE '%UNPLANNED CIP%')
-      AND No LIKE @line
-      AND Tanggal >= @start
-      AND Tanggal < @end
-      order by Tanggal;`);
+      .input("end", sql.DateTime, parsedDateEnd).query(`SELECT 
+        CAST(Downtime AS INT) AS Downtime, 
+        RIGHT(TypeDowntime, CHARINDEX('.', REVERSE(TypeDowntime)) - 1) AS name
+        FROM dbo.${tableName}
+        WHERE (
+          TypeDowntime LIKE '%.Reject%' 
+          OR TypeDowntime LIKE '%.Sample%' 
+          OR TypeDowntime LIKE '%.BLOW AWAL%' 
+          OR TypeDowntime LIKE '%.DRAIN AKHIR%' 
+          OR TypeDowntime LIKE '%.SIRKULASI%' 
+          OR TypeDowntime LIKE '%.UNPLANNED CIP%'
+        )
+        AND No LIKE @line
+        AND Tanggal >= @start
+        AND Tanggal <= @end
+        ORDER BY Tanggal;
+      `);
 
     res.status(200).json(result.recordset);
   } catch (error) {
@@ -2178,11 +2225,11 @@ app.post("/getSpeedLoss", async (req, res) => {
 
     console.log("Parsed Date End: ", parsedDateEnd);
 
-    const lineInitial = line.charAt(5).toUpperCase();
+    const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
 
     const result = await pool
       .request()
-      .input("line", sql.VarChar, `${lineInitial}%`)
+      .input("line", sql.VarChar, `${lineInitial.combined}`)
       .input("start", sql.DateTime, parsedDateStart)
       .input("end", sql.DateTime, parsedDateEnd)
       .query(`SELECT Downtime FROM dbo.${tableName} 
@@ -2201,9 +2248,13 @@ app.post("/getSpeedLoss", async (req, res) => {
 });
 
 app.post("/getNominalSpeed", async (req, res) => {
-  const { line, date_start, date_end } = req.body;
+  const { line, date_start, date_end, plant } = req.body;
   try {
     let pool = await sql.connect(config);
+
+    // table name based on plant
+    const tableName = getTableName(plant);
+
     const parsedDateStart = new Date(date_start);
     if (isNaN(parsedDateStart)) {
       return res.status(400).json({ message: "Invalid date_start" });
@@ -2218,14 +2269,14 @@ app.post("/getNominalSpeed", async (req, res) => {
 
     console.log("Parsed Date End: ", parsedDateEnd);
 
-    const lineInitial = line.charAt(5).toUpperCase();
+    const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
 
     const result = await pool
       .request()
-      .input("line", sql.VarChar, `${lineInitial}%`)
+      .input("line", sql.VarChar, `${lineInitial.combined}`)
       .input("start", sql.DateTime, parsedDateStart)
       .input("end", sql.DateTime, parsedDateEnd)
-      .query(`SELECT Tanggal, Downtime FROM dbo.tb_filling_downtime_all2 
+      .query(`SELECT Tanggal, Downtime FROM dbo.${tableName}
       WHERE TypeDowntime LIKE '%NOMINAL SPEED%'
       AND No LIKE @line
       AND Tanggal >= @start
@@ -2267,11 +2318,11 @@ app.post("/getQuantity", async (req, res) => {
 
     console.log("Parsed Date End: ", parsedDateEnd);
 
-    const lineInitial = line.charAt(5).toUpperCase();
+    const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
 
     const result = await pool
       .request()
-      .input("line", sql.VarChar, `${lineInitial}%`)
+      .input("line", sql.VarChar, `${lineInitial.combined}`)
       .input("start", sql.DateTime, parsedDateStart)
       .input("end", sql.DateTime, parsedDateEnd)
       .query(`SELECT Downtime FROM dbo.${tableName} 
