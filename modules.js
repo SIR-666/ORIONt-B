@@ -39,6 +39,13 @@ function parseTableFillingValues(
       "GEA 5": "E",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else if (plant === "Cheese") {
+    const mapping = {
+      "MOZ 200": "A",
+      "MOZ 1000": "B",
+      RICO: "C",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
     lineInitial = line.charAt(5).toUpperCase();
   }
@@ -65,6 +72,13 @@ function parseLine(line, date_start, week, plant) {
       "GEA 5": "E",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else if (plant === "Cheese") {
+    const mapping = {
+      "MOZ 200": "A",
+      "MOZ 1000": "B",
+      RICO: "C",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
     lineInitial = line.charAt(5).toUpperCase();
   }
@@ -89,6 +103,13 @@ function parseLineSpeedLoss(line, date_start, plant) {
       "GEA 5": "E",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else if (plant === "Cheese") {
+    const mapping = {
+      "MOZ 200": "A",
+      "MOZ 1000": "B",
+      RICO: "C",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
     lineInitial = line.charAt(5).toUpperCase();
   }
@@ -108,6 +129,13 @@ function parseLineDowntime(line, date_start, week, plant) {
       "GEA 3": "C",
       "GEA 4": "D",
       "GEA 5": "E",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else if (plant === "Cheese") {
+    const mapping = {
+      "MOZ 200": "A",
+      "MOZ 1000": "B",
+      RICO: "C",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
@@ -471,15 +499,30 @@ const getOrCreateProduct = async (pool, material) => {
   throw new Error("Failed to insert new product.");
 };
 
-function getTableName(plant) {
+function getTableName(plant, line) {
   const tableMapping = {
     "Milk Processing": "tb_processing_downtime_all2",
     "Milk Filling Packing": "tb_filling_downtime_all2",
-    Yogurt: "tb_processingYGT_downtime_all2",
     Cheese: "tb_packingCheese_downtime_all",
   };
 
-  return tableMapping[plant];
+  if (plant === "Yogurt") {
+    const upperLine = line?.toUpperCase() || "";
+
+    if (["YA", "YB", "YD (POUCH)"].includes(upperLine)) {
+      return "tb_yogurt_downtime_all";
+    } else if (upperLine === "YRTD") {
+      return "tb_rtd_downtime_all";
+    } else if (upperLine === "PASTEURIZER") {
+      return "tb_processingYGT_downtime_all2";
+    }
+
+    // Default fallback jika line tidak cocok
+    return "tb_yogurt_downtime_all";
+  }
+
+  // Untuk plant lain
+  return tableMapping[plant] || null;
 }
 
 function getProductionName(plant) {
@@ -487,7 +530,7 @@ function getProductionName(plant) {
     "Milk Processing": "HASIL PRODUKSI (AFT LOSS)",
     "Milk Filling Packing": "Finish Good (Pcs)",
     Yogurt: "HASIL PRODUKSI (AFT LOSS)",
-    Cheese: "HASIL PRODUKSI (AFT LOSS)",
+    Cheese: "Finish Good (Pcs)",
   };
 
   return tableMapping[plant];

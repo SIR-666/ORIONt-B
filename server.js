@@ -1,16 +1,18 @@
 require("dotenv").config();
 const express = require("express");
+const cors = require("cors");
 const sql = require("mssql");
 const config = require("./config");
 
 const app = express();
 const port = process.env.PORT_1 | 3001;
+app.use(cors());
 app.use(express.json());
 
 // API Route to get master data for Plant and Line
 app.get("/api/getPlantLine", async (req, res) => {
   try {
-    const apiUrl = "http://127.0.0.1:8080/getgreenTAGarea";
+    const apiUrl = "http://10.24.7.70:8080/getgreenTAGarea";
     if (!apiUrl) {
       console.error("URL_FETCH environment variable is not set.");
       return res.status(500).send("Server configuration error");
@@ -104,12 +106,12 @@ app.post("/createPO", async (req, res) => {
 
     const sapUrl =
       plant === "Milk Processing"
-        ? `http://127.0.0.1:8080/getProcessOrderSAP/${year}/${month}/SFP%20ESL/SFP%20UHT`
+        ? `http://10.24.7.70:8080/getProcessOrderSAP/${year}/${month}/SFP%20ESL/SFP%20UHT`
         : plant === "Yogurt"
-        ? `http://127.0.0.1:8080/getProcessOrderSAP/${year}/${month}/YOGURT`
+        ? `http://10.24.7.70:8080/getProcessOrderSAP/${year}/${month}/YOGURT`
         : plant === "Cheese"
-        ? `http://127.0.0.1:8080/getProcessOrderSAP/${year}/${month}/MOZZ/RICOTTA`
-        : `http://127.0.0.1:8080/getProcessOrderSAP/${year}/${month}/GF%20MILK`;
+        ? `http://10.24.7.70:8080/getProcessOrderSAP/${year}/${month}/MOZZ/RICOTTA`
+        : `http://10.24.7.70:8080/getProcessOrderSAP/${year}/${month}/GF%20MILK`;
 
     const apiResponse = await fetch(sapUrl);
     const allData = await apiResponse.json();
@@ -861,7 +863,7 @@ app.post("/getAllStoppages", async (req, res) => {
     let pool = await sql.connect(config);
 
     // table name based on plant
-    const tableName = getTableName(plant);
+    const tableName = getTableName(plant, line);
 
     // Run the query
     const result = await pool
@@ -996,13 +998,13 @@ app.get("/getDowntimeId/:id", async (req, res) => {
 });
 
 app.get("/getAllPerformance", async (req, res) => {
-  const { plant } = req.query;
+  const { plant, line } = req.query;
 
   try {
     let pool = await sql.connect(config);
 
     // table name based on plant
-    const tableName = getTableName(plant);
+    const tableName = getTableName(plant, line);
 
     const query = `
       SELECT
@@ -1070,7 +1072,7 @@ app.post("/createStoppage", async (req, res) => {
       : "Filling";
 
   // table name based on plant
-  const tableName = getTableName(plant);
+  const tableName = getTableName(plant, line);
 
   // -- New Code --
   // Konversi date_start menjadi objek Date
@@ -1289,7 +1291,7 @@ app.put("/updateStoppage", async (req, res) => {
     pool = await sql.connect(config);
 
     // table name based on plant
-    const tableName = getTableName(plant);
+    const tableName = getTableName(plant, line);
 
     let currentDowntime = 0;
 
@@ -1384,13 +1386,13 @@ app.put("/updateStoppage", async (req, res) => {
 
 // API Route to remove downtime
 app.post("/deleteStoppage", async (req, res) => {
-  const { id, plant } = req.body;
+  const { id, plant, line } = req.body;
 
   try {
     const pool = await sql.connect(config);
 
     // table name based on plant
-    const tableName = getTableName(plant);
+    const tableName = getTableName(plant, line);
 
     const statusResult = await pool
       .request()
@@ -1529,7 +1531,7 @@ app.post("/insertQuantity", async (req, res) => {
     pool = await sql.connect(config);
 
     // table name based on plant
-    const tableName = getTableName(plant);
+    const tableName = getTableName(plant, line);
 
     // production name based on plant
     const productionName = getProductionName(plant);
@@ -1617,7 +1619,7 @@ app.post("/insertSpeedLoss", async (req, res) => {
     pool = await sql.connect(config);
 
     // table name based on plant
-    const tableName = getTableName(plant);
+    const tableName = getTableName(plant, line);
 
     const parsedDateStart = new Date(startTime);
     if (isNaN(parsedDateStart)) {
@@ -1716,7 +1718,7 @@ app.post("/deleteSpeedLoss", async (req, res) => {
     pool = await sql.connect(config);
 
     // table name based on plant
-    const tableName = getTableName(plant);
+    const tableName = getTableName(plant, line);
 
     const parsedDateStart = new Date(startTime);
     if (isNaN(parsedDateStart)) {
@@ -1810,7 +1812,7 @@ app.post("/insertQualLoss", async (req, res) => {
     pool = await sql.connect(config);
 
     // table name based on plant
-    const tableName = getTableName(plant);
+    const tableName = getTableName(plant, line);
 
     const parsedDateStart = new Date(startTime);
     if (isNaN(parsedDateStart.getTime())) {
@@ -1928,7 +1930,7 @@ app.post("/insertPerformance", async (req, res) => {
     pool = await sql.connect(config);
 
     // table name based on plant
-    const tableName = getTableName(plant);
+    const tableName = getTableName(plant, line);
 
     const parsedDateStart = new Date(startTime);
     if (isNaN(parsedDateStart.getTime())) {
@@ -2108,7 +2110,7 @@ app.post("/getQualityLoss", async (req, res) => {
     let pool = await sql.connect(config);
 
     // table name based on plant
-    const tableName = getTableName(plant);
+    const tableName = getTableName(plant, line);
 
     const parsedDateStart = new Date(date_start);
     if (isNaN(parsedDateStart)) {
@@ -2153,7 +2155,7 @@ app.post("/getRejectSample", async (req, res) => {
     let pool = await sql.connect(config);
 
     // table name based on plant
-    const tableName = getTableName(plant);
+    const tableName = getTableName(plant, line);
 
     const parsedDateStart = new Date(date_start);
     if (isNaN(parsedDateStart)) {
@@ -2209,7 +2211,7 @@ app.post("/getSpeedLoss", async (req, res) => {
     let pool = await sql.connect(config);
 
     // table name based on plant
-    const tableName = getTableName(plant);
+    const tableName = getTableName(plant, line);
 
     const parsedDateStart = new Date(date_start);
     if (isNaN(parsedDateStart)) {
@@ -2253,7 +2255,7 @@ app.post("/getNominalSpeed", async (req, res) => {
     let pool = await sql.connect(config);
 
     // table name based on plant
-    const tableName = getTableName(plant);
+    const tableName = getTableName(plant, line);
 
     const parsedDateStart = new Date(date_start);
     if (isNaN(parsedDateStart)) {
@@ -2299,7 +2301,7 @@ app.post("/getQuantity", async (req, res) => {
     let pool = await sql.connect(config);
 
     // table name based on plant
-    const tableName = getTableName(plant);
+    const tableName = getTableName(plant, line);
 
     // production name based on plant
     const productionName = getProductionName(plant);
@@ -2392,6 +2394,27 @@ app.get("/getProducts", async (req, res) => {
     res.status(200).json(result.recordset);
   } catch (error) {
     console.error("Error fetching products:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.get("/getGroupByPlant", async (req, res) => {
+  try {
+    let pool = await sql.connect(config);
+
+    const { plant } = req.query; // Ambil query parameter 'plant'
+
+    const query = `SELECT * FROM GroupMaster WHERE plant = @plant;`;
+
+    const result = await pool
+      .request()
+      .input("plant", sql.VarChar, plant)
+      .query(query);
+
+    console.log("Retrieved Data: ", result.recordset);
+    res.json(result.recordset);
+  } catch (error) {
+    console.error(error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
