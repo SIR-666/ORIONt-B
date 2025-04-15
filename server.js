@@ -113,14 +113,39 @@ app.post("/createPO", async (req, res) => {
         ? `http://10.24.7.70:8080/getProcessOrderSAP/${year}/${month}/MOZZ/RICOTTA`
         : `http://10.24.7.70:8080/getProcessOrderSAP/${year}/${month}/GF%20MILK`;
 
-    const apiResponse = await fetch(sapUrl);
-    const allData = await apiResponse.json();
+    let allData;
+    if (plant === "Milk Processing") {
+      allData = await getLocalProcessingOrder(plant);
+    } else {
+      const apiResponse = await fetch(sapUrl);
+      allData = await apiResponse.json();
+    }
     const record = allData.find((item) => item["NO PROCESS ORDER"] === id);
 
     if (!record) {
       return res
         .status(404)
         .json({ message: `Record with NO PROCESS ORDER ${id} not found.` });
+    }
+
+    let baseId;
+
+    if (plant === "Milk Processing") {
+      baseId = 800100000000;
+      let idExists = true;
+
+      while (idExists) {
+        const idCheckResult = await pool
+          .request()
+          .input("id", sql.BigInt, baseId)
+          .query("SELECT 1 FROM [dbo].[ProductionOrder] WHERE id = @id;");
+
+        if (idCheckResult.recordset.length === 0) {
+          idExists = false;
+        } else {
+          baseId++;
+        }
+      }
     }
 
     const {
@@ -132,6 +157,9 @@ app.post("/createPO", async (req, res) => {
       "TIME SCHEDULED END": endTime,
       "TOTAL QUANTITY / GR": qty,
     } = record;
+
+    const finalProcessOrderId =
+      plant === "Milk Processing" ? baseId.toString() : noProcessOrder;
 
     if (!startDate || !endDate) {
       return res
@@ -167,7 +195,7 @@ app.post("/createPO", async (req, res) => {
     `;
     const existingOrder = await pool
       .request()
-      .input("po", sql.BigInt, parseInt(noProcessOrder, 10))
+      .input("po", sql.BigInt, parseInt(finalProcessOrderId, 10))
       .query(existingOrderQuery);
 
     if (existingOrder.recordset.length > 0) {
@@ -187,7 +215,7 @@ app.post("/createPO", async (req, res) => {
     `;
     const orderResult = await pool
       .request()
-      .input("id", sql.BigInt, parseInt(noProcessOrder, 10))
+      .input("id", sql.BigInt, parseInt(finalProcessOrderId, 10))
       .input("product", sql.Int, productId)
       .input("qty", sql.Int, finalQtyInt)
       .input("start", sql.DateTime, localDateTimeStart)
@@ -203,6 +231,7 @@ app.post("/createPO", async (req, res) => {
     }
 
     return res.json({
+      id: finalProcessOrderId,
       rowsAffected: orderResult.rowsAffected,
       message: "Successfully inserted PO from SAP to local database",
     });
@@ -2409,6 +2438,108 @@ app.get("/getGroupByPlant", async (req, res) => {
     const result = await pool
       .request()
       .input("plant", sql.VarChar, plant)
+      .query(query);
+
+    console.log("Retrieved Data: ", result.recordset);
+    res.json(result.recordset);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+async function getLocalProcessingOrder(plant) {
+  const pool = await sql.connect(config);
+
+  const query = `
+    SELECT 
+      id AS [NO PROCESS ORDER],
+      material AS [MATERIAL],
+      FORMAT(qty, 'N0') AS [TOTAL QUANTITY / GR],
+      status AS [STATUS]   
+    FROM ProcessingOrder
+    WHERE plant = @plant;
+  `;
+
+  const result = await pool
+    .request()
+    .input("plant", sql.VarChar, plant)
+    .query(query);
+
+  const today = new Date();
+  const pad = (n) => n.toString().padStart(2, "0");
+  const formattedToday = `${pad(today.getDate())}.${pad(
+    today.getMonth() + 1
+  )}.${today.getFullYear()}`;
+
+  const processedData = result.recordset.map((item) => ({
+    ...item,
+    "TANGGAL BASIC DATE START": formattedToday,
+    "TIME BASIC DATE START": "00:00:00",
+    "TANGGAL BASIC DATE END": formattedToday,
+    "TIME BASIC DATE": "00:00:00",
+    "TANGGAL SCHEDULED START": formattedToday,
+    "TIME SCHEDULED START": "00:00:00",
+    "TANGGAL SCHEDULED END": formattedToday,
+    "TIME SCHEDULED END": "00:00:00",
+  }));
+
+  return processedData;
+}
+
+app.get("/getProcessingOrder", async (req, res) => {
+  try {
+    const { plant } = req.query;
+    const processedData = await getLocalProcessingOrder(plant);
+    console.log("Retrieved Data: ", processedData);
+    res.json(processedData);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.put("/updateStatusDowntimeCILT", async (req, res) => {
+  const { id, status } = req.body;
+  try {
+    let pool = await sql.connect(config);
+
+    const result = await pool
+      .request()
+      .input("id", sql.Int, id)
+      .input("status", sql.Int, status)
+      .query(`UPDATE tb_CILT_downtime SET Completed = @status WHERE id = @id;`);
+
+    res.status(200).json(result.recordset);
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Internal Server Error", error: error.message });
+  }
+});
+
+app.get("/getDowntimeFromCILT", async (req, res) => {
+  try {
+    let pool = await sql.connect(config);
+
+    const { plant, date, shift, line } = req.query;
+
+    const query = `
+      SELECT * FROM tb_CILT_downtime
+      WHERE Plant = @plant
+        AND CONVERT(date, [Date]) = @date
+        AND Shift = @shift
+        AND Line = @line
+        AND Completed = 0;
+    `;
+
+    const result = await pool
+      .request()
+      .input("plant", sql.VarChar, plant)
+      .input("date", sql.VarChar, date)
+      .input("shift", sql.VarChar, shift)
+      .input("line", sql.VarChar, line)
       .query(query);
 
     console.log("Retrieved Data: ", result.recordset);
