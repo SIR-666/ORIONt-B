@@ -2263,7 +2263,7 @@ app.post("/getSpeedLoss", async (req, res) => {
       .input("line", sql.VarChar, `${lineInitial.combined}`)
       .input("start", sql.DateTime, parsedDateStart)
       .input("end", sql.DateTime, parsedDateEnd)
-      .query(`SELECT Downtime FROM dbo.${tableName} 
+      .query(`SELECT Tanggal, Downtime FROM dbo.${tableName} 
       WHERE TypeDowntime LIKE '%LOSS SPEED%' 
       AND No LIKE @line
       AND Tanggal >= @start
