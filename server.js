@@ -163,10 +163,12 @@ app.post("/createPO", async (req, res) => {
     } = record;
 
     const finalProcessOrderId =
-      plant === "Milk Processing" || plant === "Yogurt";
-    plant === "Cheese" || plant === "Milk Filling Packing"
-      ? baseId.toString()
-      : noProcessOrder;
+      plant === "Milk Processing" ||
+      plant === "Yogurt" ||
+      plant === "Cheese" ||
+      plant === "Milk Filling Packing"
+        ? baseId.toString()
+        : noProcessOrder;
 
     if (!startDate || !endDate) {
       return res
