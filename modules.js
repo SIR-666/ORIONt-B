@@ -32,8 +32,8 @@ function parseTableFillingValues(
 
   if (plant === "Milk Processing") {
     const mapping = {
-      "FLEX 1": "A",
-      "FLEX 2": "B",
+      "Flex 1": "A",
+      "Flex 2": "B",
       "GEA 3": "C",
       "GEA 4": "D",
       "GEA 5": "E",
@@ -44,6 +44,14 @@ function parseTableFillingValues(
       "MOZ 200": "A",
       "MOZ 1000": "B",
       RICO: "C",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else if (plant === "Yogurt") {
+    const mapping = {
+      YA: "A",
+      YB: "B",
+      YRTD: "YRa",
+      PASTEURIZER: "S",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
@@ -79,6 +87,14 @@ function parseLine(line, date_start, week, plant) {
       RICO: "C",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else if (plant === "Yogurt") {
+    const mapping = {
+      YA: "A",
+      YB: "B",
+      YRTD: "YHa",
+      PASTEURIZER: "S",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
     lineInitial = line.charAt(5).toUpperCase();
   }
@@ -110,6 +126,14 @@ function parseLineSpeedLoss(line, date_start, plant) {
       RICO: "C",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else if (plant === "Yogurt") {
+    const mapping = {
+      YA: "A",
+      YB: "B",
+      YRTD: "YHa",
+      PASTEURIZER: "S",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
     lineInitial = line.charAt(5).toUpperCase();
   }
@@ -136,6 +160,14 @@ function parseLineDowntime(line, date_start, week, plant) {
       "MOZ 200": "A",
       "MOZ 1000": "B",
       RICO: "C",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else if (plant === "Yogurt") {
+    const mapping = {
+      YA: "A",
+      YB: "B",
+      YRTD: "YRa",
+      PASTEURIZER: "S",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
@@ -525,13 +557,25 @@ function getTableName(plant, line) {
   return tableMapping[plant] || null;
 }
 
-function getProductionName(plant) {
+function getProductionName(plant, line) {
   const tableMapping = {
     "Milk Processing": "HASIL PRODUKSI (AFT LOSS)",
     "Milk Filling Packing": "Finish Good (Pcs)",
-    Yogurt: "HASIL PRODUKSI (AFT LOSS)",
     Cheese: "Finish Good (Pcs)",
   };
+
+  if (plant === "Yogurt") {
+    const upperLine = line?.toUpperCase() || "";
+
+    if (["YA", "YB", "YRTD"].includes(upperLine)) {
+      return "Finish Good (Pcs)";
+    } else if (upperLine === "PASTEURIZER") {
+      return "HASIL PRODUKSI (AFT LOSS)";
+    }
+
+    // Default fallback jika line tidak cocok
+    return "Finish Good (Pcs)";
+  }
 
   return tableMapping[plant];
 }

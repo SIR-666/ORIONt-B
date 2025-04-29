@@ -114,11 +114,10 @@ app.post("/createPO", async (req, res) => {
         : `http://10.24.7.70:8080/getProcessOrderSAP/${year}/${month}/GF%20MILK`;
 
     let allData;
-    if (plant === "Milk Processing") {
-      allData = await getLocalProcessingOrder(plant);
+    if (plant === "Yogurt" && line === "PASTEURIZER") {
+      allData = await getLocalPasteurizerOrder(plant, line);
     } else {
-      const apiResponse = await fetch(sapUrl);
-      allData = await apiResponse.json();
+      allData = await getProductDummy(plant);
     }
     const record = allData.find((item) => item["NO PROCESS ORDER"] === id);
 
@@ -130,7 +129,12 @@ app.post("/createPO", async (req, res) => {
 
     let baseId;
 
-    if (plant === "Milk Processing") {
+    if (
+      plant === "Milk Processing" ||
+      plant === "Yogurt" ||
+      plant === "Cheese" ||
+      plant === "Milk Filling Packing"
+    ) {
       baseId = 800100000000;
       let idExists = true;
 
@@ -159,7 +163,10 @@ app.post("/createPO", async (req, res) => {
     } = record;
 
     const finalProcessOrderId =
-      plant === "Milk Processing" ? baseId.toString() : noProcessOrder;
+      plant === "Milk Processing" || plant === "Yogurt";
+    plant === "Cheese" || plant === "Milk Filling Packing"
+      ? baseId.toString()
+      : noProcessOrder;
 
     if (!startDate || !endDate) {
       return res
@@ -1563,7 +1570,7 @@ app.post("/insertQuantity", async (req, res) => {
     const tableName = getTableName(plant, line);
 
     // production name based on plant
-    const productionName = getProductionName(plant);
+    const productionName = getProductionName(plant, line);
 
     const parsedDateStart = new Date(startTime);
     if (isNaN(parsedDateStart)) {
@@ -2333,7 +2340,7 @@ app.post("/getQuantity", async (req, res) => {
     const tableName = getTableName(plant, line);
 
     // production name based on plant
-    const productionName = getProductionName(plant);
+    const productionName = getProductionName(plant, line);
 
     const parsedDateStart = new Date(date_start);
     if (isNaN(parsedDateStart)) {
@@ -2487,10 +2494,114 @@ async function getLocalProcessingOrder(plant) {
   return processedData;
 }
 
+async function getLocalPasteurizerOrder(plant, line) {
+  const pool = await sql.connect(config);
+
+  const query = `
+    SELECT 
+      id AS [NO PROCESS ORDER],
+      material AS [MATERIAL],
+      FORMAT(qty, 'N0') AS [TOTAL QUANTITY / GR],
+      status AS [STATUS]   
+    FROM ProductDummy
+    WHERE plant = @plant
+    AND line = @line;
+  `;
+
+  const result = await pool
+    .request()
+    .input("plant", sql.VarChar, plant)
+    .input("line", sql.VarChar, line)
+    .query(query);
+
+  const today = new Date();
+  const pad = (n) => n.toString().padStart(2, "0");
+  const formattedToday = `${pad(today.getDate())}.${pad(
+    today.getMonth() + 1
+  )}.${today.getFullYear()}`;
+
+  const processedData = result.recordset.map((item) => ({
+    ...item,
+    "TANGGAL BASIC DATE START": formattedToday,
+    "TIME BASIC DATE START": "00:00:00",
+    "TANGGAL BASIC DATE END": formattedToday,
+    "TIME BASIC DATE": "00:00:00",
+    "TANGGAL SCHEDULED START": formattedToday,
+    "TIME SCHEDULED START": "00:00:00",
+    "TANGGAL SCHEDULED END": formattedToday,
+    "TIME SCHEDULED END": "00:00:00",
+  }));
+
+  return processedData;
+}
+
+async function getProductDummy(plant) {
+  const pool = await sql.connect(config);
+
+  const query = `
+    SELECT 
+      id AS [NO PROCESS ORDER],
+      material AS [MATERIAL],
+      FORMAT(qty, 'N0') AS [TOTAL QUANTITY / GR],
+      status AS [STATUS]   
+    FROM ProductDummy
+    WHERE plant = @plant;
+  `;
+
+  const result = await pool
+    .request()
+    .input("plant", sql.VarChar, plant)
+    .query(query);
+
+  const today = new Date();
+  const pad = (n) => n.toString().padStart(2, "0");
+  const formattedToday = `${pad(today.getDate())}.${pad(
+    today.getMonth() + 1
+  )}.${today.getFullYear()}`;
+
+  const processedData = result.recordset.map((item) => ({
+    ...item,
+    "TANGGAL BASIC DATE START": formattedToday,
+    "TIME BASIC DATE START": "00:00:00",
+    "TANGGAL BASIC DATE END": formattedToday,
+    "TIME BASIC DATE": "00:00:00",
+    "TANGGAL SCHEDULED START": formattedToday,
+    "TIME SCHEDULED START": "00:00:00",
+    "TANGGAL SCHEDULED END": formattedToday,
+    "TIME SCHEDULED END": "00:00:00",
+  }));
+
+  return processedData;
+}
+
 app.get("/getProcessingOrder", async (req, res) => {
   try {
     const { plant } = req.query;
     const processedData = await getLocalProcessingOrder(plant);
+    console.log("Retrieved Data: ", processedData);
+    res.json(processedData);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.get("/getPasteurizerOrder", async (req, res) => {
+  try {
+    const { plant, line } = req.query;
+    const processedData = await getLocalPasteurizerOrder(plant, line);
+    console.log("Retrieved Data: ", processedData);
+    res.json(processedData);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.get("/getProductDummy", async (req, res) => {
+  try {
+    const { plant } = req.query;
+    const processedData = await getProductDummy(plant);
     console.log("Retrieved Data: ", processedData);
     res.json(processedData);
   } catch (error) {
@@ -2554,94 +2665,3 @@ app.get("/getDowntimeFromCILT", async (req, res) => {
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
-
-// app.get('/getAllPOOLD/:line', async (req, res) => {
-//   const { line } = req.params;
-//   try {
-//     // Connect to the database
-//     let pool = await sql.connect(config);
-
-//     // Run the query
-//     const result = await pool
-//       .request()
-//       .input("line", sql.VarChar, line)
-//       .query(`SELECT PO.id, P.sku, PO.qty, PO.date_start, PO.date_end, PO.status, PO.actual_start, PO.actual_end, PO.plant, PO.line
-//         FROM ProductionOrder PO
-//         INNER JOIN Product P
-//         ON PO.product_id = P.id
-//         AND PO.line = @line
-//         ORDER BY status desc;`);
-
-//       console.log("Retrieved Production Order:", result.recordset);
-//     // Send the result back to the client
-//     res.status(200).json(result.recordset);
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({ error: 'Internal Server Error' });
-//   }
-// });
-
-// app.post('/createEmptyPOOLD', async (req, res) => {
-//   const { date_start, date_end, plant, line, group } = req.body;
-
-//   try {
-//     let pool = await sql.connect(config);
-
-//     const groupResult = await pool
-//     .request()
-//     .input("group", sql.VarChar, group)
-//     .query('SELECT id FROM GroupMaster WHERE [group] = @group;');
-
-//     const groupId = groupResult.recordset[0]?.id;
-
-//     if (!groupId) {
-//       return res.status(400).json({ message: 'Invalid group provided.' });
-//     }
-
-//     let baseId = 666666000000;
-//     let idExists = true;
-
-//     while (idExists) {
-//       const idCheckResult = await pool
-//         .request()
-//         .input("id", sql.BigInt, baseId)
-//         .query('SELECT 1 FROM [dbo].[ProductionOrder] WHERE id = @id;');
-
-//       if (idCheckResult.recordset.length === 0) {
-//         idExists = false; // Unique ID found
-//       } else {
-//         baseId++; // Increment ID
-//       }
-//     }
-
-//     const insertOrderQuery = `
-//       INSERT INTO [dbo].[ProductionOrder]
-//       (
-//         id, product_id, qty, date_start, date_end, status, created_at, updated_at, actual_start, actual_end, plant, line, completion_count, [group]
-//       )
-//       VALUES (
-//         @id, 100, 0, @start, @end, 'Completed', GETDATE(), GETDATE(), @actual_start, @actual_end, @plant, @line, 1, @group
-//       )
-//     `;
-//     const orderResult = await pool
-//       .request()
-//       .input("id", sql.BigInt, baseId)
-//       .input("start", sql.DateTime, date_start)
-//       .input("end", sql.DateTime, date_end)
-//       .input("actual_start", sql.DateTime, date_start)
-//       .input("actual_end", sql.DateTime, date_end)
-//       .input("plant", sql.VarChar, plant)
-//       .input("line", sql.VarChar, line.toUpperCase())
-//       .input("group", sql.Int, groupId)
-//       .query(insertOrderQuery);
-
-//     if (orderResult.rowsAffected[0] === 0) {
-//       throw new Error('Failed to insert production order.');
-//     }
-
-//     return res.json({ rowsAffected: orderResult.rowsAffected, message: "Successfully created PO for UT-No PO insertion", id: baseId });
-//   } catch (error) {
-//     console.error('Error occurred:', error.message);
-//     res.status(500).json({ message: 'Internal Server Error' });
-//   }
-// });
