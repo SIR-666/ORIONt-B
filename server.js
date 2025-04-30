@@ -364,7 +364,7 @@ app.post("/createEmptyPO", async (req, res) => {
           id, product_id, qty, date_start, date_end, status, created_at, updated_at, actual_start, actual_end, plant, line, completion_count, [group]
         )
         VALUES (
-          @id, 100, 0, @start, @end, 'Completed', GETDATE(), GETDATE(), @actual_start, @actual_end, @plant, @line, 1, @group
+          @id, 131, 0, @start, @end, 'Completed', GETDATE(), GETDATE(), @actual_start, @actual_end, @plant, @line, 1, @group
         )
         `);
       }
@@ -451,7 +451,7 @@ app.post("/createEmptyPO", async (req, res) => {
           id, product_id, qty, date_start, date_end, status, created_at, updated_at, actual_start, actual_end, plant, line, completion_count, [group]
         )
         VALUES (
-          @id, 100, 0, @start, @end, 'Completed', GETDATE(), GETDATE(), @actual_start, @actual_end, @plant, @line, 1, @group
+          @id, 131, 0, @start, @end, 'Completed', GETDATE(), GETDATE(), @actual_start, @actual_end, @plant, @line, 1, @group
         )`);
       }
     } else {
@@ -472,7 +472,7 @@ app.post("/createEmptyPO", async (req, res) => {
         id, product_id, qty, date_start, date_end, status, created_at, updated_at, actual_start, actual_end, plant, line, completion_count, [group]
       )
       VALUES (
-        @id, 100, 0, @start, @end, 'Completed', GETDATE(), GETDATE(), @actual_start, @actual_end, @plant, @line, 1, @group
+        @id, 131, 0, @start, @end, 'Completed', GETDATE(), GETDATE(), @actual_start, @actual_end, @plant, @line, 1, @group
       )
     `;
       insertOrderQuery = await pool
