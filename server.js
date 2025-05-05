@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const sql = require("mssql");
 const config = require("./config");
+const moment = require("moment");
 
 const app = express();
 const port = process.env.PORT_1 | 3001;
@@ -2656,6 +2657,66 @@ app.get("/getDowntimeFromCILT", async (req, res) => {
 
     console.log("Retrieved Data: ", result.recordset);
     res.json(result.recordset);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.get("/getHistoryFinishGood", async (req, res) => {
+  try {
+    let pool = await sql.connect(config);
+
+    const { plant, line } = req.query;
+
+    const tableName = getTableName(plant, line);
+    const productionName = getProductionName(plant, line);
+
+    const query = `
+      SELECT 
+        d.Tanggal, 
+        d.Downtime, 
+        d.TypeDowntime,
+        p.product_id,
+        prod.sku AS product_sku,
+        p.status,
+        p.actual_start,
+        p.line AS production_line
+      FROM dbo.${tableName} d
+      LEFT JOIN dbo.ProductionOrder p
+        ON p.actual_start = d.Tanggal
+        AND p.line = @line
+      LEFT JOIN dbo.Product prod
+        ON p.product_id = prod.id
+      WHERE CONVERT(date, d.Tanggal) = CONVERT(date, DATEADD(DAY, -1, GETDATE()))
+        AND d.TypeDowntime LIKE @productionName
+      ORDER BY d.Tanggal DESC;
+    `;
+
+    const result = await pool
+      .request()
+      .input("productionName", sql.VarChar, `%${productionName}%`)
+      .input("line", sql.VarChar, line)
+      .query(query);
+
+    const formattedData = result.recordset.map((item) => {
+      const [group, ...typeParts] = item.TypeDowntime.includes(".")
+        ? item.TypeDowntime.split(".")
+        : ["-", item.TypeDowntime];
+      const typeDowntime = typeParts.join(".");
+
+      return {
+        tanggal: moment.utc(item.Tanggal).format("DD-MM-YYYY HH:mm:ss"),
+        downtime: item.Downtime,
+        typeDowntime: typeDowntime,
+        group: group,
+        productSku: item.product_sku,
+        status: item.status,
+        productionLine: item.production_line,
+      };
+    });
+
+    res.json(formattedData);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal Server Error" });
