@@ -2688,7 +2688,7 @@ app.get("/getHistoryFinishGood", async (req, res) => {
         AND p.line = @line
       LEFT JOIN dbo.Product prod
         ON p.product_id = prod.id
-      WHERE CONVERT(date, d.Tanggal) = CONVERT(date, DATEADD(DAY, -1, GETDATE()))
+      WHERE CONVERT(date, d.Tanggal) BETWEEN CONVERT(date, DATEADD(DAY, -1, GETDATE())) AND CONVERT(date, GETDATE())
         AND d.TypeDowntime LIKE @productionName
       ORDER BY d.Tanggal DESC;
     `;
