@@ -1097,7 +1097,7 @@ app.post("/createStoppage", async (req, res) => {
     plant,
   } = req.body;
 
-  const uppercasedLine = line;
+  const uppercasedLine = line.toUpperCase();
 
   // update plant name
   const updatedPlant =

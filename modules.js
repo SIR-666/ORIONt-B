@@ -15,7 +15,17 @@ function parseTableFillingValues(
     date_start = new Date(date_start);
   }
 
-  const groupInitial = group.charAt(0).toUpperCase(); // "K" from "KRAKATAU"
+  let groupInitial;
+  if (plant === "Yogurt") {
+    const mapping = {
+      "RANU REGULO": "R",
+      "RANU PANI": "P",
+      "RANU KUMBOLO": "K",
+    };
+    groupInitial = mapping[group] || group.charAt(0).toUpperCase();
+  } else {
+    groupInitial = group.charAt(0).toUpperCase(); // "K" from "KRAKATAU"
+  }
 
   // Example parsing logic based on the input
   if (machine === "Planned Stop") {
@@ -32,8 +42,8 @@ function parseTableFillingValues(
 
   if (plant === "Milk Processing") {
     const mapping = {
-      "Flex 1": "A",
-      "Flex 2": "B",
+      "FLEX 1": "A",
+      "FLEX 2": "B",
       "GEA 3": "C",
       "GEA 4": "D",
       "GEA 5": "E",
