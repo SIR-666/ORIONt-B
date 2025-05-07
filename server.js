@@ -2683,7 +2683,7 @@ app.get("/getHistoryFinishGood", async (req, res) => {
         p.actual_start,
         p.line AS production_line
       FROM dbo.${tableName} d
-      LEFT JOIN dbo.ProductionOrder p
+      INNER JOIN dbo.ProductionOrder p
         ON p.actual_start = d.Tanggal
         AND p.line = @line
       LEFT JOIN dbo.Product prod
@@ -2717,6 +2717,107 @@ app.get("/getHistoryFinishGood", async (req, res) => {
     });
 
     res.json(formattedData);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.get("/getMasterDowntime", async (req, res) => {
+  try {
+    let pool = await sql.connect(config);
+
+    const { line } = req.query;
+
+    const query = `
+      SELECT 
+        d.id,
+        d.downtime_category AS downtimeCategory,
+        d.mesin, 
+        d.downtime
+      FROM dbo.DowntimeMaster d
+      WHERE d.line = @line;
+    `;
+
+    const result = await pool
+      .request()
+      .input("line", sql.VarChar, line)
+      .query(query);
+
+    res.json(result.recordset);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.post("/addMasterDowntime", async (req, res) => {
+  try {
+    let pool = await sql.connect(config);
+
+    const { line, downtimeCategory, mesin, downtime } = req.body;
+
+    const query = `
+      INSERT INTO dbo.DowntimeMaster (line, downtime_category, mesin, downtime, flag, created_at, updated_at)
+      VALUES (@line, @downtimeCategory, @mesin, @downtime, 1, GETDATE(), GETDATE());
+    `;
+
+    const result = await pool
+      .request()
+      .input("line", sql.VarChar, line.toUpperCase())
+      .input("downtimeCategory", sql.VarChar, downtimeCategory)
+      .input("mesin", sql.VarChar, mesin)
+      .input("downtime", sql.VarChar, downtime)
+      .query(query);
+
+    res.json(result.recordset);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.post("/updateMasterDowntime", async (req, res) => {
+  try {
+    let pool = await sql.connect(config);
+
+    const { id, downtimeCategory, mesin, downtime } = req.body;
+
+    const query = `
+      UPDATE dbo.DowntimeMaster
+      SET downtime_category = @downtimeCategory, mesin = @mesin, downtime = @downtime
+      WHERE id = @id;
+    `;
+
+    const result = await pool
+      .request()
+      .input("id", sql.Int, id)
+      .input("downtimeCategory", sql.VarChar, downtimeCategory)
+      .input("mesin", sql.VarChar, mesin)
+      .input("downtime", sql.VarChar, downtime)
+      .query(query);
+
+    res.json(result.recordset);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.delete("/deleteMasterDowntime", async (req, res) => {
+  try {
+    let pool = await sql.connect(config);
+
+    const { id } = req.body;
+
+    const query = `
+      DELETE FROM dbo.DowntimeMaster
+      WHERE id = @id;
+    `;
+
+    const result = await pool.request().input("id", sql.Int, id).query(query);
+
+    res.json(result.recordset);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal Server Error" });
