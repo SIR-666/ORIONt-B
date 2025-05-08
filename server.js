@@ -2824,6 +2824,32 @@ app.delete("/deleteMasterDowntime", async (req, res) => {
   }
 });
 
+app.get("/getMachineDowntime", async (req, res) => {
+  try {
+    let pool = await sql.connect(config);
+
+    const { line } = req.query;
+
+    const query = `
+      SELECT DISTINCT
+        d.mesin
+      FROM dbo.DowntimeMaster d
+      WHERE d.line = @line
+      AND d.downtime_category = 'Breakdown/Minor Stop';
+    `;
+
+    const result = await pool
+      .request()
+      .input("line", sql.VarChar, line.toUpperCase())
+      .query(query);
+
+    res.json(result.recordset);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
 // Start the server
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
