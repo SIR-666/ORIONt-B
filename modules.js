@@ -148,7 +148,9 @@ function parseLineSpeedLoss(line, date_start, plant) {
     lineInitial = line.charAt(5).toUpperCase();
   }
 
-  const dateDay = date_start.getDate().toString().padStart(2, "0");
+  const localDate = new Date(date_start);
+  localDate.setHours(localDate.getHours() + 7); // offset ke WIB
+  const dateDay = localDate.getDate().toString().padStart(2, "0");
   const No = `${lineInitial}EG${dateDay}`; // Result: "ADG28"
   return { combined: No };
 }
