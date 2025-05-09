@@ -2167,7 +2167,7 @@ app.post("/getRejectSample", async (req, res) => {
         )
         AND No LIKE @line
         AND Tanggal >= @start
-        AND Tanggal = @end
+        AND Tanggal < @end
         ORDER BY Tanggal;
       `);
 
