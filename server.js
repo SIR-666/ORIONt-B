@@ -83,6 +83,7 @@ const {
   getTableName,
   getProductionName,
   parseLineSpeedLoss,
+  parseLineInitial,
 } = require("./modules");
 
 // insert PO from SAP to local database
@@ -2598,6 +2599,7 @@ app.get("/getHistoryFinishGood", async (req, res) => {
 
     const tableName = getTableName(plant, line);
     const productionName = getProductionName(plant, line);
+    const lineInitial = parseLineInitial(plant, line);
 
     const query = `
       SELECT 
@@ -2613,17 +2615,19 @@ app.get("/getHistoryFinishGood", async (req, res) => {
       INNER JOIN dbo.ProductionOrder p
         ON p.actual_start = d.Tanggal
         AND p.line = @line
-      LEFT JOIN dbo.Product prod
+      INNER JOIN dbo.Product prod
         ON p.product_id = prod.id
       WHERE CONVERT(date, d.Tanggal) BETWEEN CONVERT(date, DATEADD(DAY, -1, GETDATE())) AND CONVERT(date, GETDATE())
         AND d.TypeDowntime LIKE @productionName
+        AND d.No LIKE @lineInitial
       ORDER BY d.Tanggal DESC;
     `;
 
     const result = await pool
       .request()
       .input("productionName", sql.VarChar, `%${productionName}%`)
-      .input("line", sql.VarChar, line)
+      .input("line", sql.VarChar, line.toUpperCase())
+      .input("lineInitial", sql.VarChar, `${lineInitial}%`)
       .query(query);
 
     const formattedData = result.recordset.map((item) => {

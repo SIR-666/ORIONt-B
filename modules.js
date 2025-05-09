@@ -117,6 +117,40 @@ function parseLine(line, date_start, week, plant) {
   return { combined: No, id: id, line: lineInitial };
 }
 
+function parseLineInitial(plant, line) {
+  let lineInitial;
+
+  if (plant === "Milk Processing") {
+    const mapping = {
+      "Flex 1": "A",
+      "Flex 2": "B",
+      "GEA 3": "C",
+      "GEA 4": "D",
+      "GEA 5": "E",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else if (plant === "Cheese") {
+    const mapping = {
+      "MOZ 200": "A",
+      "MOZ 1000": "B",
+      RICO: "C",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else if (plant === "Yogurt") {
+    const mapping = {
+      YA: "A",
+      YB: "B",
+      YRTD: "YHa",
+      PASTEURIZER: "S",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else {
+    lineInitial = line.charAt(5).toUpperCase();
+  }
+
+  return lineInitial;
+}
+
 function parseLineSpeedLoss(line, date_start, plant) {
   let lineInitial;
 
@@ -572,6 +606,7 @@ function getProductionName(plant, line) {
 module.exports = {
   parseTableFillingValues,
   parseLine,
+  parseLineInitial,
   parseLineDowntime,
   parseLineSpeedLoss,
   saveSplitOrders,
