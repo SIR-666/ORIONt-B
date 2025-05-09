@@ -1144,7 +1144,7 @@ app.post("/createStoppage", async (req, res) => {
       .input("machine", sql.VarChar, machine) // machine atau downtime yang dipilih di awal
       .input("type", sql.VarChar, type) // yang dipilih setelah memilih machine atau downtime
       .input("comments", sql.VarChar, comments)
-      .input("duration", sql.Int, duration)
+      .input("duration", sql.Float, duration)
       .query(`INSERT INTO dbo.tb_reasonDowntime 
               (Unit
               ,Code
@@ -1321,7 +1321,8 @@ app.put("/updateStoppage", async (req, res) => {
       .input("date_start", sql.DateTime, date_start)
       .input("category", sql.VarChar, type)
       .input("comments", sql.VarChar, comments)
-      .input("duration", sql.Int, duration).query(`UPDATE dbo.tb_reasonDowntime 
+      .input("duration", sql.Float, duration)
+      .query(`UPDATE dbo.tb_reasonDowntime 
               SET Date = @date_start, 
               Downtime_Category = @category, 
               Keterangan = @comments, 
@@ -2166,10 +2167,11 @@ app.post("/getRejectSample", async (req, res) => {
         )
         AND No LIKE @line
         AND Tanggal >= @start
-        AND Tanggal <= @end
+        AND Tanggal = @end
         ORDER BY Tanggal;
       `);
 
+    console.log("Reject sample", result.recordset);
     res.status(200).json(result.recordset);
   } catch (error) {
     console.error(error);
@@ -2192,13 +2194,11 @@ app.post("/getSpeedLoss", async (req, res) => {
     if (isNaN(parsedDateStart)) {
       return res.status(400).json({ message: "Invalid date_start" });
     }
-    console.log(parsedDateStart);
 
     const parsedDateEnd = new Date(date_end);
     if (isNaN(parsedDateEnd)) {
       return res.status(400).json({ message: "Invalid date_end" });
     }
-    console.log(parsedDateEnd);
 
     const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
     console.log(lineInitial.combined);
