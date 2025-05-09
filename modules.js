@@ -64,6 +64,18 @@ function parseTableFillingValues(
       PASTEURIZER: "S",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else if (plant === "Milk Filling Packing") {
+    const mapping = {
+      "LINE A": "A",
+      "LINE B": "B",
+      "LINE C": "C",
+      "LINE D": "D",
+      "LINE E": "E",
+      "LINE F": "F",
+      "LINE G": "G",
+      "LINE H": "H",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
     lineInitial = line.charAt(5).toUpperCase();
   }
@@ -105,6 +117,18 @@ function parseLine(line, date_start, week, plant) {
       PASTEURIZER: "S",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else if (plant === "Milk Filling Packing") {
+    const mapping = {
+      "Line A": "A",
+      "Line B": "B",
+      "Line C": "C",
+      "Line D": "D",
+      "Line E": "E",
+      "Line F": "F",
+      "Line G": "G",
+      "Line H": "H",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
     lineInitial = line.charAt(5).toUpperCase();
   }
@@ -144,6 +168,18 @@ function parseLineInitial(plant, line) {
       PASTEURIZER: "S",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else if (plant === "Milk Filling Packing") {
+    const mapping = {
+      "Line A": "A",
+      "Line B": "B",
+      "Line C": "C",
+      "Line D": "D",
+      "Line E": "E",
+      "Line F": "F",
+      "Line G": "G",
+      "Line H": "H",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
     lineInitial = line.charAt(5).toUpperCase();
   }
@@ -176,6 +212,18 @@ function parseLineSpeedLoss(line, date_start, plant) {
       YB: "B",
       YRTD: "YHa",
       PASTEURIZER: "S",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else if (plant === "Milk Filling Packing") {
+    const mapping = {
+      "Line A": "A",
+      "Line B": "B",
+      "Line C": "C",
+      "Line D": "D",
+      "Line E": "E",
+      "Line F": "F",
+      "Line G": "G",
+      "Line H": "H",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
@@ -214,6 +262,18 @@ function parseLineDowntime(line, date_start, week, plant) {
       YB: "B",
       YRTD: "YRa",
       PASTEURIZER: "S",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else if (plant === "Milk Filling Packing") {
+    const mapping = {
+      "Line A": "A",
+      "Line B": "B",
+      "Line C": "C",
+      "Line D": "D",
+      "Line E": "E",
+      "Line F": "F",
+      "Line G": "G",
+      "Line H": "H",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
