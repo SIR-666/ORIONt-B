@@ -196,8 +196,7 @@ function getShift(shift, date) {
   let startTime = "";
   let endTime = "";
   let currentDate = new Date(date);
-  console.log("Retrieved date: ", date);
-  console.log("Date: ", currentDate);
+
   switch (shift) {
     case "I":
       startTime = new Date(currentDate.setUTCHours(6, 0, 0, 0));
@@ -217,8 +216,6 @@ function getShift(shift, date) {
       break;
   }
 
-  console.log("Start time: ", startTime);
-  console.log("End time: ", endTime);
   return { start: startTime, end: endTime };
 }
 
@@ -274,17 +271,12 @@ const saveSplitOrders = async (
       }
       shiftEnd.setHours(endHour, endMinute, 0, 0);
 
-      console.log("Shift start: ", shiftStart);
-      console.log("Shift end: ", shiftEnd);
-
       // Check if the start time falls within this shift
       if (start >= shiftStart && start < shiftEnd) {
         currentShiftEnd = shiftEnd;
         break;
       }
     }
-
-    console.log("Current shift end: ", currentShiftEnd);
 
     if (currentShiftEnd) {
       await pool
@@ -302,12 +294,8 @@ const saveSplitOrders = async (
       startTime = currentShiftEnd;
     }
 
-    console.log("Start PO: ", start);
-    console.log("End PO: ", end);
-
     const splitOrders = [];
     let current = new Date(start);
-    console.log("Current: ", current);
 
     let groupId;
     let groupIndex = 0; // Initialize the group index
@@ -327,16 +315,12 @@ const saveSplitOrders = async (
         }
         shiftEnd.setHours(endHour, endMinute, 0, 0);
 
-        // console.log("Shift start time: ", shiftStart);
-        // console.log("Shift end time: ", shiftEnd);
-
         const groupSelection = groupSelections[groupIndex]; // Use groupIndex instead of i
         if (!groupSelection) {
           console.warn(`No group selection for group index ${groupIndex}`);
           groupIndex = 0; // Reset to the first group if out of bounds
           continue;
         }
-        console.log("Groups: ", groupSelection);
 
         switch (groupSelection) {
           case "BROMO":
@@ -376,8 +360,6 @@ const saveSplitOrders = async (
         current = new Date(shiftEnd);
       }
     }
-
-    console.log("Split POs: ", splitOrders);
 
     // Save all split orders to the database
     for (const order of splitOrders) {
@@ -448,7 +430,6 @@ const getShiftEndTime = async (pool, date) => {
 
       for (const record of shiftResult.recordset) {
         const dbStartTime = new Date(record.actual_start);
-        console.log("PO start times: ", dbStartTime);
 
         // Check if this start time is after dateObj and before the current endTime
         if (dbStartTime > dateObj && dbStartTime < endTime) {
@@ -493,8 +474,6 @@ const getOrCreateProduct = async (pool, material) => {
     .input("sku", sql.VarChar, material)
     .query(productQuery);
 
-  console.log("Retrieved Product Data: ", productResult);
-
   if (productResult.recordset.length > 0) {
     return productResult.recordset[0].id;
   }
@@ -530,8 +509,6 @@ const getOrCreateProduct = async (pool, material) => {
     .request()
     .input("sku", sql.VarChar, material)
     .query(insertProductQuery);
-
-  console.log("Inser Result: ", insertResult);
 
   if (insertResult.recordset.length > 0) {
     // Return the newly created product ID

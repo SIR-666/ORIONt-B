@@ -193,12 +193,8 @@ app.post("/createPO", async (req, res) => {
     } else {
       finalQtyInt = parseInt(cleanedQty);
     }
-    console.log("Float value: ", qtyFloat);
-    console.log("Final value: ", finalQtyInt);
 
     const productId = await getOrCreateProduct(pool, material);
-
-    console.log("Retrieved Product id: ", productId);
 
     const existingOrderQuery = `
       SELECT id FROM ProductionOrder WHERE id = @po
@@ -314,9 +310,6 @@ app.post("/createEmptyPO", async (req, res) => {
         }
         shiftEnd.setHours(endHour, endMinute, 0, 0);
 
-        console.log("Shift start: ", shiftStart);
-        console.log("Shift end: ", shiftEnd);
-
         // Check if the start time falls within this shift
         if (start >= shiftStart && start < shiftEnd) {
           currentShiftEnd = shiftEnd;
@@ -324,15 +317,8 @@ app.post("/createEmptyPO", async (req, res) => {
         }
       }
 
-      console.log("Current shift end: ", currentShiftEnd);
-
-      console.log("Start PO: ", start);
-      console.log("End PO: ", end);
-
       const splitOrders = [];
       let current = new Date(start);
-
-      console.log("Current: ", current);
 
       let groupId;
       let groupIndex = 1;
@@ -386,16 +372,12 @@ app.post("/createEmptyPO", async (req, res) => {
           }
           shiftEnd.setHours(endHour, endMinute, 0, 0);
 
-          // console.log("Shift start time: ", shiftStart);
-          // console.log("Shift end time: ", shiftEnd);
-
           const groupSelections = groupSelection[groupIndex]; // Use groupIndex instead of i
           if (!groupSelections) {
             console.warn(`No group selection for group index ${groupIndex}`);
             groupIndex = 0; // Reset to the first group if out of bounds
             continue;
           }
-          console.log("Groups: ", groupSelections);
 
           switch (groupSelections) {
             case "BROMO":
@@ -514,7 +496,6 @@ app.get("/getAllGroup/:plant", async (req, res) => {
       .input("plant", sql.VarChar, plant)
       .query("SELECT [group] FROM GroupMaster WHERE plant = @plant;");
 
-    console.log("Retrieved group data: ", result.recordset);
     res.status(200).json(result.recordset);
   } catch (error) {
     console.error(error);
@@ -553,7 +534,6 @@ app.get("/getAllPO/:line/:shift/:date", async (req, res) => {
         ORDER BY 
           PO.status DESC`);
 
-    console.log("Retrieved Production Order:", result.recordset);
     // Send the result back to the client
     res.status(200).json(result.recordset);
   } catch (error) {
@@ -575,7 +555,6 @@ app.get("/getAllPOLine/:line", async (req, res) => {
         `SELECT id, status, actual_start, actual_end FROM ProductionOrder WHERE line = @line;`
       );
 
-    console.log("Retrieved Production Order:", result.recordset);
     res.status(200).json(result.recordset);
   } catch (error) {
     console.error(error);
@@ -591,7 +570,6 @@ app.get("/getOrders", async (req, res) => {
       .request()
       .query(`SELECT id FROM ProductionOrder;`);
 
-    console.log(result);
     res.json(result.recordset);
   } catch (error) {
     console.error(error);
@@ -628,7 +606,6 @@ app.post("/getAllPOShift", async (req, res) => {
         ) 
          order by actual_start;`);
 
-    console.log("Retrieved Production Order:", result.recordset);
     if (result.recordset.length === 0) {
       res.status(404).json({
         message: "No production orders found for the specified shift and line.",
@@ -683,16 +660,7 @@ const { getShiftEndTime } = require("./modules");
 
 // API Route to update PO start time and end time
 app.post("/updateStartEndPO", async (req, res) => {
-  const { id, date, actual_start, actual_end, poStart, poEnd } = req.body;
-  console.log(
-    "Received data from front-end: ",
-    id,
-    date,
-    actual_start,
-    actual_end,
-    poStart,
-    poEnd
-  );
+  const { id, actual_start, actual_end, poStart, poEnd } = req.body;
 
   let pool;
   try {
@@ -721,7 +689,6 @@ app.post("/updateStartEndPO", async (req, res) => {
     if (actual_end) request.input("actualEnd", sql.DateTime, actual_end);
 
     const result = await request.query(query);
-    console.log("Rows affected:", result.rowsAffected);
     res.status(200).json({ success: true, rowsAffected: result.rowsAffected });
   } catch (error) {
     console.error("Error updating timestamps:", error);
@@ -964,7 +931,6 @@ app.post("/getAllStoppages", async (req, res) => {
         ORDER BY Date;`
       );
 
-    console.log("Retrieved Downtime:", result.recordset);
     // Send the result back to the client
     res.status(200).json(result.recordset);
   } catch (error) {
@@ -1007,7 +973,6 @@ app.get("/getAllDowntime", async (req, res) => {
 
     const result = await pool.request().query(query);
 
-    console.log("Retrieved Data: ", result.recordset);
     res.json(result.recordset);
   } catch (error) {
     console.error(error);
@@ -1028,7 +993,6 @@ app.get("/getDowntimeId/:id", async (req, res) => {
       .input("id", sql.VarChar, id)
       .query(query);
 
-    console.log("Retrieved Downtime Data based on id: ", result.recordset);
     res.json(result.recordset);
   } catch (error) {
     console.error(error);
@@ -1068,7 +1032,6 @@ app.get("/getAllPerformance", async (req, res) => {
 
     const result = await pool.request().query(query);
 
-    console.log("Retrieved Data: ", result.recordset);
     res.json(result.recordset);
   } catch (error) {
     console.error(error);
@@ -1167,8 +1130,7 @@ app.post("/createStoppage", async (req, res) => {
       group,
       plant
     );
-    console.log("Inserting date as local time:", date_start);
-    console.log("Truncated date:", truncatedDate);
+
     const resultReason = await transaction
       .request()
       .input("unit", sql.VarChar, updatedPlant) // untuk unit menggunakan updated plant name
@@ -1223,7 +1185,6 @@ app.post("/createStoppage", async (req, res) => {
       throw new Error("Insert operation failed or did not return an ID.");
     }
     const newId = resultReason.recordset[0].Id;
-    console.log("New data ID added: ", newId);
 
     const existingEntry = await transaction
       .request()
@@ -1352,9 +1313,8 @@ app.put("/updateStoppage", async (req, res) => {
     if (isNaN(dateStart)) {
       return res.status(400).json({ message: "Invalid date_start format" });
     }
+
     const table2Data = parseLineDowntime(line, dateStart, date_week, plant);
-    console.log("Inserting date as local time:", date_start);
-    console.log("Downtime Category: ", type);
     const resultReason = await transaction
       .request()
       .input("id", sql.Int, parseInt(id))
@@ -1443,7 +1403,6 @@ app.post("/deleteStoppage", async (req, res) => {
         .request()
         .input("id", sql.Int, id)
         .query(`DELETE FROM [dbo].[tb_reasonDowntime] WHERE id = @id`);
-      console.log("Delete result:", result);
 
       // Check for rowsAffected
       const rowsAffected = result.rowsAffected[0] || 0;
@@ -1467,8 +1426,6 @@ app.post("/deleteStoppage", async (req, res) => {
               AND No LIKE @No;
       `);
 
-      console.log("Existing entry: ", existingEntry.recordset);
-
       if (existingEntry.recordset && existingEntry.recordset.length > 0) {
         const currentDuration = parseInt(
           existingEntry.recordset[0].Downtime,
@@ -1476,14 +1433,6 @@ app.post("/deleteStoppage", async (req, res) => {
         );
         const reducedDuration = parseInt(stoppageDetails.Minutes, 10);
         const newDuration = Math.max(0, currentDuration - reducedDuration);
-
-        console.log({
-          UpdatedDowntime: newDuration.toString(),
-          EntryTanggal: truncatedDate,
-          Downtime: `%${stoppageDetails.Jenis}%`,
-          No: `${parsedLine.line}%`,
-          ID: `${parsedLine.id}`,
-        });
 
         const updatedResult = await pool
           .request()
@@ -1561,7 +1510,6 @@ const { parseLine } = require("./modules");
 
 app.post("/insertQuantity", async (req, res) => {
   const { qty, line, startTime, date_week, group, plant } = req.body;
-  // console.log("Received Data: \n", qty, line, startTime, date_week, group);
 
   let pool;
   let result;
@@ -1650,7 +1598,6 @@ app.post("/insertQuantity", async (req, res) => {
 
 app.post("/insertSpeedLoss", async (req, res) => {
   const { speed, nominal, line, startTime, date_week, group, plant } = req.body;
-  // console.log("Received Data: \n", speed, line, startTime, date_week, group);
 
   let pool;
   try {
@@ -1780,7 +1727,7 @@ app.post("/deleteSpeedLoss", async (req, res) => {
         .query(
           `DELETE FROM [dbo].[${tableName}] WHERE Tanggal = @date AND TypeDowntime LIKE '%SPEED%' AND No LIKE @line`
         );
-      console.log("Delete result:", result);
+
       const rowsAffected = result.rowsAffected[0] || 0;
 
       return res.json({
@@ -1995,8 +1942,6 @@ app.post("/insertPerformance", async (req, res) => {
       return res.status(400).json({ message: "Invalid truncatedDate" });
     }
 
-    console.log("Final truncatedDate:", truncatedDate);
-
     const upsertData = async (type, value) => {
       if (value === null || value === undefined || isNaN(parseFloat(value))) {
         return; // Skip invalid or missing data
@@ -2155,14 +2100,10 @@ app.post("/getQualityLoss", async (req, res) => {
       return res.status(400).json({ message: "Invalid date_start" });
     }
 
-    console.log("Parsed Date Start: ", parsedDateStart);
-
     const parsedDateEnd = new Date(date_end);
     if (isNaN(parsedDateEnd)) {
       return res.status(400).json({ message: "Invalid date_end" });
     }
-
-    console.log("Parsed Date End: ", parsedDateEnd);
 
     const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
 
@@ -2200,14 +2141,10 @@ app.post("/getRejectSample", async (req, res) => {
       return res.status(400).json({ message: "Invalid date_start" });
     }
 
-    console.log("Parsed Date Start: ", parsedDateStart);
-
     const parsedDateEnd = new Date(date_end);
     if (isNaN(parsedDateEnd)) {
       return res.status(400).json({ message: "Invalid date_end" });
     }
-
-    console.log("Parsed Date End: ", parsedDateEnd);
 
     const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
 
@@ -2255,17 +2192,16 @@ app.post("/getSpeedLoss", async (req, res) => {
     if (isNaN(parsedDateStart)) {
       return res.status(400).json({ message: "Invalid date_start" });
     }
-
-    console.log("Parsed Date Start: ", parsedDateStart);
+    console.log(parsedDateStart);
 
     const parsedDateEnd = new Date(date_end);
     if (isNaN(parsedDateEnd)) {
       return res.status(400).json({ message: "Invalid date_end" });
     }
-
-    console.log("Parsed Date End: ", parsedDateEnd);
+    console.log(parsedDateEnd);
 
     const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
+    console.log(lineInitial.combined);
 
     const result = await pool
       .request()
@@ -2278,6 +2214,8 @@ app.post("/getSpeedLoss", async (req, res) => {
       AND Tanggal >= @start
       AND Tanggal < @end
       order by Tanggal;`);
+
+    console.log("Speed Loss Data: ", result.recordset);
     res.status(200).json(result.recordset);
   } catch (error) {
     console.error(error);
@@ -2300,14 +2238,10 @@ app.post("/getNominalSpeed", async (req, res) => {
       return res.status(400).json({ message: "Invalid date_start" });
     }
 
-    console.log("Parsed Date Start: ", parsedDateStart);
-
     const parsedDateEnd = new Date(date_end);
     if (isNaN(parsedDateEnd)) {
       return res.status(400).json({ message: "Invalid date_end" });
     }
-
-    console.log("Parsed Date End: ", parsedDateEnd);
 
     const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
 
@@ -2349,14 +2283,10 @@ app.post("/getQuantity", async (req, res) => {
       return res.status(400).json({ message: "Invalid date_start" });
     }
 
-    console.log("Parsed Date Start: ", parsedDateStart);
-
     const parsedDateEnd = new Date(date_end);
     if (isNaN(parsedDateEnd)) {
       return res.status(400).json({ message: "Invalid date_end" });
     }
-
-    console.log("Parsed Date End: ", parsedDateEnd);
 
     const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
 
@@ -2427,7 +2357,6 @@ app.get("/getProducts", async (req, res) => {
       .map((_, i) => `@id${i}`)
       .join(",")})`;
     const result = await request.query(query);
-    console.log("Retrieved Products:", result.recordset);
 
     res.status(200).json(result.recordset);
   } catch (error) {
@@ -2449,7 +2378,6 @@ app.get("/getGroupByPlant", async (req, res) => {
       .input("plant", sql.VarChar, plant)
       .query(query);
 
-    console.log("Retrieved Data: ", result.recordset);
     res.json(result.recordset);
   } catch (error) {
     console.error(error);
@@ -2580,7 +2508,7 @@ app.get("/getProcessingOrder", async (req, res) => {
   try {
     const { plant } = req.query;
     const processedData = await getLocalProcessingOrder(plant);
-    console.log("Retrieved Data: ", processedData);
+
     res.json(processedData);
   } catch (error) {
     console.error(error);
@@ -2592,7 +2520,7 @@ app.get("/getPasteurizerOrder", async (req, res) => {
   try {
     const { plant, line } = req.query;
     const processedData = await getLocalPasteurizerOrder(plant, line);
-    console.log("Retrieved Data: ", processedData);
+
     res.json(processedData);
   } catch (error) {
     console.error(error);
@@ -2604,7 +2532,7 @@ app.get("/getProductDummy", async (req, res) => {
   try {
     const { plant } = req.query;
     const processedData = await getProductDummy(plant);
-    console.log("Retrieved Data: ", processedData);
+
     res.json(processedData);
   } catch (error) {
     console.error(error);
@@ -2655,7 +2583,6 @@ app.get("/getDowntimeFromCILT", async (req, res) => {
       .input("line", sql.VarChar, line)
       .query(query);
 
-    console.log("Retrieved Data: ", result.recordset);
     res.json(result.recordset);
   } catch (error) {
     console.error(error);
