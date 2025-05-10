@@ -128,9 +128,11 @@ function parseLine(line, date_start, week, plant) {
       "Line G": "G",
       "Line H": "H",
     };
-    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+    // lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+    lineInitial = mapping[line];
   } else {
-    lineInitial = line.charAt(5).toUpperCase();
+    // lineInitial = line.charAt(5).toUpperCase();
+    lineInitial = line.toUpperCase();
   }
 
   const dateDay = date_start.getDate().toString().padStart(2, "0");
