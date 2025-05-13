@@ -128,9 +128,11 @@ function parseLine(line, date_start, week, plant) {
       "Line G": "G",
       "Line H": "H",
     };
-    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+    // lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+    lineInitial = mapping[line];
   } else {
-    lineInitial = line.charAt(5).toUpperCase();
+    // lineInitial = line.charAt(5).toUpperCase();
+    lineInitial = line.toUpperCase();
   }
 
   const dateDay = date_start.getDate().toString().padStart(2, "0");
@@ -230,10 +232,61 @@ function parseLineSpeedLoss(line, date_start, plant) {
     lineInitial = line.charAt(5).toUpperCase();
   }
 
+  const localDate = new Date(date_start); // tetap UTC atau waktu asli
+  const dateDay = localDate.getUTCDate().toString().padStart(2, "0");
+  const No = `${lineInitial}EG${dateDay}`;
+  console.log("No UTC", No);
+  return { combined: No };
+}
+
+function parseLineWIB(line, date_start, plant) {
+  let lineInitial;
+
+  if (plant === "Milk Processing") {
+    const mapping = {
+      "Flex 1": "A",
+      "Flex 2": "B",
+      "GEA 3": "C",
+      "GEA 4": "D",
+      "GEA 5": "E",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else if (plant === "Cheese") {
+    const mapping = {
+      "MOZ 200": "A",
+      "MOZ 1000": "B",
+      RICO: "C",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else if (plant === "Yogurt") {
+    const mapping = {
+      YA: "A",
+      YB: "B",
+      YRTD: "YHa",
+      PASTEURIZER: "S",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else if (plant === "Milk Filling Packing") {
+    const mapping = {
+      "Line A": "A",
+      "Line B": "B",
+      "Line C": "C",
+      "Line D": "D",
+      "Line E": "E",
+      "Line F": "F",
+      "Line G": "G",
+      "Line H": "H",
+    };
+    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+  } else {
+    lineInitial = line.charAt(5).toUpperCase();
+  }
+
   const localDate = new Date(date_start);
   localDate.setHours(localDate.getHours() + 7); // offset ke WIB
   const dateDay = localDate.getDate().toString().padStart(2, "0");
   const No = `${lineInitial}EG${dateDay}`; // Result: "ADG28"
+  console.log("No WIB", No);
   return { combined: No };
 }
 
@@ -669,6 +722,7 @@ module.exports = {
   parseLineInitial,
   parseLineDowntime,
   parseLineSpeedLoss,
+  parseLineWIB,
   saveSplitOrders,
   getShift,
   getShiftEndTime,

@@ -83,6 +83,7 @@ const {
   getTableName,
   getProductionName,
   parseLineSpeedLoss,
+  parseLineWIB,
   parseLineInitial,
 } = require("./modules");
 
@@ -2107,7 +2108,7 @@ app.post("/getQualityLoss", async (req, res) => {
       return res.status(400).json({ message: "Invalid date_end" });
     }
 
-    const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
+    const lineInitial = parseLineWIB(line, parsedDateStart, plant);
 
     const result = await pool
       .request()
@@ -2201,8 +2202,7 @@ app.post("/getSpeedLoss", async (req, res) => {
       return res.status(400).json({ message: "Invalid date_end" });
     }
 
-    const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
-    console.log(lineInitial.combined);
+    const lineInitial = parseLineWIB(line, parsedDateStart, plant);
 
     const result = await pool
       .request()
