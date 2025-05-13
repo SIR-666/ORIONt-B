@@ -93,22 +93,29 @@ function parseTableFillingValues(
 function parseLine(line, date_start, week, plant) {
   let lineInitial;
 
+  // Pastikan line adalah string valid dan ubah menjadi uppercase
+  if (!line) {
+    line = "UNKNOWN";
+  } else {
+    line = line.toUpperCase();
+  }
+
   if (plant === "Milk Processing") {
     const mapping = {
-      "Flex 1": "A",
-      "Flex 2": "B",
+      "FLEX 1": "A",
+      "FLEX 2": "B",
       "GEA 3": "C",
       "GEA 4": "D",
       "GEA 5": "E",
     };
-    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+    lineInitial = mapping[line];
   } else if (plant === "Cheese") {
     const mapping = {
       "MOZ 200": "A",
       "MOZ 1000": "B",
       RICO: "C",
     };
-    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+    lineInitial = mapping[line];
   } else if (plant === "Yogurt") {
     const mapping = {
       YA: "A",
@@ -116,23 +123,21 @@ function parseLine(line, date_start, week, plant) {
       YRTD: "YHa",
       PASTEURIZER: "S",
     };
-    lineInitial = mapping[line] || line.charAt(5).toUpperCase();
+    lineInitial = mapping[line];
   } else if (plant === "Milk Filling Packing") {
     const mapping = {
-      "Line A": "A",
-      "Line B": "B",
-      "Line C": "C",
-      "Line D": "D",
-      "Line E": "E",
-      "Line F": "F",
-      "Line G": "G",
-      "Line H": "H",
+      "LINE A": "A",
+      "LINE B": "B",
+      "LINE C": "C",
+      "LINE D": "D",
+      "LINE E": "E",
+      "LINE F": "F",
+      "LINE G": "G",
+      "LINE H": "H",
     };
-    // lineInitial = mapping[line] || line.charAt(5).toUpperCase();
     lineInitial = mapping[line];
   } else {
-    // lineInitial = line.charAt(5).toUpperCase();
-    lineInitial = line.toUpperCase();
+    lineInitial = line;
   }
 
   const dateDay = date_start.getDate().toString().padStart(2, "0");
