@@ -1,4 +1,5 @@
 const sql = require("mssql");
+const logger = require("./logger");
 
 function parseTableFillingValues(
   date_start,
@@ -93,59 +94,75 @@ function parseTableFillingValues(
 function parseLine(line, date_start, week, plant) {
   let lineInitial;
 
-  // Pastikan line adalah string valid dan ubah menjadi uppercase
   if (!line) {
     line = "UNKNOWN";
+    logger.warn("parseLine | Line not provided, defaults to 'UNKNOWN'");
   } else {
     line = line.toUpperCase();
   }
 
-  if (plant === "Milk Processing") {
-    const mapping = {
-      "FLEX 1": "A",
-      "FLEX 2": "B",
-      "GEA 3": "C",
-      "GEA 4": "D",
-      "GEA 5": "E",
-    };
-    lineInitial = mapping[line];
-  } else if (plant === "Cheese") {
-    const mapping = {
-      "MOZ 200": "A",
-      "MOZ 1000": "B",
-      RICO: "C",
-    };
-    lineInitial = mapping[line];
-  } else if (plant === "Yogurt") {
-    const mapping = {
-      YA: "A",
-      YB: "B",
-      YRTD: "YHa",
-      PASTEURIZER: "S",
-    };
-    lineInitial = mapping[line];
-  } else if (plant === "Milk Filling Packing") {
-    const mapping = {
-      "LINE A": "A",
-      "LINE B": "B",
-      "LINE C": "C",
-      "LINE D": "D",
-      "LINE E": "E",
-      "LINE F": "F",
-      "LINE G": "G",
-      "LINE H": "H",
-    };
-    lineInitial = mapping[line];
-  } else {
-    lineInitial = line;
-  }
+  try {
+    if (plant === "Milk Processing") {
+      const mapping = {
+        "FLEX 1": "A",
+        "FLEX 2": "B",
+        "GEA 3": "C",
+        "GEA 4": "D",
+        "GEA 5": "E",
+      };
+      lineInitial = mapping[line];
+    } else if (plant === "Cheese") {
+      const mapping = {
+        "MOZ 200": "A",
+        "MOZ 1000": "B",
+        RICO: "C",
+      };
+      lineInitial = mapping[line];
+    } else if (plant === "Yogurt") {
+      const mapping = {
+        YA: "A",
+        YB: "B",
+        YRTD: "YHa",
+        PASTEURIZER: "S",
+      };
+      lineInitial = mapping[line];
+    } else if (plant === "Milk Filling Packing") {
+      const mapping = {
+        "LINE A": "A",
+        "LINE B": "B",
+        "LINE C": "C",
+        "LINE D": "D",
+        "LINE E": "E",
+        "LINE F": "F",
+        "LINE G": "G",
+        "LINE H": "H",
+      };
+      lineInitial = mapping[line];
+    } else {
+      lineInitial = line;
+    }
 
-  const dateDay = date_start.getDate().toString().padStart(2, "0");
-  const dateMonth = date_start.getMonth() + 1;
-  const dateYear = date_start.getFullYear();
-  const No = `${lineInitial}EG${dateDay}`; // Result: "ADG28"
-  const id = `${No}${week}${dateDay}${dateMonth}${dateYear}`;
-  return { combined: No, id: id, line: lineInitial };
+    if (!lineInitial) {
+      logger.error(
+        `parseLine | Mapping failed for line: ${line} at plant: ${plant}`
+      );
+    }
+
+    const dateDay = date_start.getDate().toString().padStart(2, "0");
+    const dateMonth = date_start.getMonth() + 1;
+    const dateYear = date_start.getFullYear();
+    const No = `${lineInitial}EG${dateDay}`;
+    const id = `${No}${week}${dateDay}${dateMonth}${dateYear}`;
+
+    logger.info(
+      `parseLine | line=${line}, plant=${plant}, lineInitial=${lineInitial}, id=${id}`
+    );
+
+    return { combined: No, id, line: lineInitial };
+  } catch (err) {
+    logger.error(`Error in parseLine: ${err.message}`);
+    throw err;
+  }
 }
 
 function parseLineInitial(plant, line) {

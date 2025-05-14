@@ -4,6 +4,7 @@ const cors = require("cors");
 const sql = require("mssql");
 const config = require("./config");
 const moment = require("moment");
+const logger = require("./logger");
 
 const app = express();
 const port = process.env.PORT_1 | 3001;
@@ -1919,6 +1920,9 @@ app.post("/insertPerformance", async (req, res) => {
 
     // table name based on plant
     const tableName = getTableName(plant, line);
+    logger.info(
+      `insertPerformance | tableName=${tableName}, plant=${plant}, line=${line}`
+    );
 
     const parsedDateStart = new Date(startTime);
     if (isNaN(parsedDateStart.getTime())) {
@@ -1926,6 +1930,9 @@ app.post("/insertPerformance", async (req, res) => {
     }
 
     const parsedLine = parseLine(line, parsedDateStart, date_week, plant);
+    logger.info(
+      `insertPerformance | combined=${parsedLine.combined}, id=${parsedLine.id}, line=${parsedLine.line}`
+    );
 
     const netValue = net ? net.toString() : "0";
     const runningValue = running ? running.toString() : "0";
@@ -2080,8 +2087,7 @@ app.post("/insertPerformance", async (req, res) => {
     await upsertData("NOT REPORTED", nReportedValue);
     await upsertData("UT-No PO", utValue);
   } catch (error) {
-    console.error("Insertion of performance data failed", error.message);
-
+    logger.error(`insertPerformance | Error: ${error.message}`);
     res
       .status(500)
       .json({ message: "Internal Server Error", error: error.message });
