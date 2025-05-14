@@ -104,19 +104,6 @@ app.post("/createPO", async (req, res) => {
 
     const groupId = groupResult.recordset[0]?.id;
 
-    const time = new Date(date);
-    const year = time.getFullYear();
-    const month = time.getMonth() + 1;
-
-    const sapUrl =
-      plant === "Milk Processing"
-        ? `http://10.24.7.70:8080/getProcessOrderSAP/${year}/${month}/SFP%20ESL/SFP%20UHT`
-        : plant === "Yogurt"
-        ? `http://10.24.7.70:8080/getProcessOrderSAP/${year}/${month}/YOGURT`
-        : plant === "Cheese"
-        ? `http://10.24.7.70:8080/getProcessOrderSAP/${year}/${month}/MOZZ/RICOTTA`
-        : `http://10.24.7.70:8080/getProcessOrderSAP/${year}/${month}/GF%20MILK`;
-
     let allData;
     if (plant === "Yogurt" && line === "PASTEURIZER") {
       allData = await getLocalPasteurizerOrder(plant, line);
@@ -131,30 +118,7 @@ app.post("/createPO", async (req, res) => {
         .json({ message: `Record with NO PROCESS ORDER ${id} not found.` });
     }
 
-    let baseId;
-
-    if (
-      plant === "Milk Processing" ||
-      plant === "Yogurt" ||
-      plant === "Cheese" ||
-      plant === "Milk Filling Packing"
-    ) {
-      baseId = 800100000000;
-      let idExists = true;
-
-      while (idExists) {
-        const idCheckResult = await pool
-          .request()
-          .input("id", sql.BigInt, baseId)
-          .query("SELECT 1 FROM [dbo].[ProductionOrder] WHERE id = @id;");
-
-        if (idCheckResult.recordset.length === 0) {
-          idExists = false;
-        } else {
-          baseId++;
-        }
-      }
-    }
+    const baseId = Date.now();
 
     const {
       "NO PROCESS ORDER": noProcessOrder,
@@ -184,8 +148,6 @@ app.post("/createPO", async (req, res) => {
     const localDateTimeEnd = formatDateTime(endDate, endTime);
 
     const cleanedQty = qty.replace(/,/g, "");
-    const qtyFloat = isNaN(parseFloat(cleanedQty)) ? 0 : parseFloat(cleanedQty);
-    // const qtyInt = isNaN(parseInt(cleanedQty)) ? 0 : parseInt(cleanedQty);
     let finalQtyInt;
 
     if (qty.includes(",") || qty.includes(".")) {
