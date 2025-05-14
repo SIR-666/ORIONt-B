@@ -219,21 +219,7 @@ app.post("/createEmptyPO", async (req, res) => {
   try {
     let pool = await sql.connect(config);
 
-    let baseId = 666666000000;
-    let idExists = true;
-
-    while (idExists) {
-      const idCheckResult = await pool
-        .request()
-        .input("id", sql.BigInt, baseId)
-        .query("SELECT 1 FROM [dbo].[ProductionOrder] WHERE id = @id;");
-
-      if (idCheckResult.recordset.length === 0) {
-        idExists = false; // Unique ID found
-      } else {
-        baseId++; // Increment ID
-      }
-    }
+    const baseId = Date.now();
 
     let insertOrderQuery;
     if (groupSelection && Object.keys(groupSelection).length > 1) {
