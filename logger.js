@@ -2,6 +2,7 @@ const { createLogger, format, transports } = require("winston");
 const { combine, printf, colorize } = format;
 const fs = require("fs");
 const path = require("path");
+const moment = require("moment");
 
 // Create log directory if it doesn't exist yet
 const logDir = "logs";
@@ -11,18 +12,9 @@ if (!fs.existsSync(logDir)) {
 
 // Custom timestamp formatter for Asia/Jakarta in YYYY-MM-DD HH:mm:ss
 const timestampWIB = () => {
-  const jakartaTime = new Date().toLocaleString("en-US", {
-    timeZone: "Asia/Jakarta",
-    hour12: false,
-  });
-  const date = new Date(jakartaTime);
-  const pad = (n) => String(n).padStart(2, "0");
-
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
-    date.getDate()
-  )} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(
-    date.getSeconds()
-  )}`;
+  return moment()
+    .utcOffset(7 * 60)
+    .format("YYYY-MM-DD HH:mm:ss");
 };
 
 // Format log line
