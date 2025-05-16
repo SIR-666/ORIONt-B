@@ -2224,11 +2224,12 @@ app.post("/getSpeedLoss", async (req, res) => {
       return res.status(400).json({ message: "Invalid date_end" });
     }
 
-    const lineInitial = parseLineWIB(line, parsedDateStart, plant);
+    const lineInitial = parseLineInitial(plant, line);
+    const idInitial = `${lineInitial}EG`;
 
     const result = await pool
       .request()
-      .input("line", sql.VarChar, `${lineInitial.combined}`)
+      .input("line", sql.VarChar, `${idInitial}%`)
       .input("start", sql.DateTime, parsedDateStart)
       .input("end", sql.DateTime, parsedDateEnd)
       .query(`SELECT Tanggal, Downtime FROM dbo.${tableName} 
@@ -2311,12 +2312,12 @@ app.post("/getQuantity", async (req, res) => {
       return res.status(400).json({ message: "Invalid date_end" });
     }
 
-    const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
-    console.log("lineInitial", lineInitial);
+    const lineInitial = parseLineInitial(plant, line);
+    const idInitial = `${lineInitial}EG`;
 
     const result = await pool
       .request()
-      .input("line", sql.VarChar, `${lineInitial.combined}`)
+      .input("line", sql.VarChar, `${idInitial}%`)
       .input("start", sql.DateTime, parsedDateStart)
       .input("end", sql.DateTime, parsedDateEnd)
       .query(`SELECT Downtime FROM dbo.${tableName} 
@@ -2325,6 +2326,7 @@ app.post("/getQuantity", async (req, res) => {
       AND Tanggal >= @start
       AND Tanggal < @end
       order by Tanggal;`);
+
     res.status(200).json(result.recordset);
   } catch (error) {
     console.error(error);
