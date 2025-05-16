@@ -90,7 +90,7 @@ const {
 
 // insert PO from SAP to local database
 app.post("/createPO", async (req, res) => {
-  const { id, date, line, group, plant } = req.body;
+  const { id, date, line, group, plant, date_week } = req.body;
 
   try {
     const pool = await sql.connect(config);
@@ -201,10 +201,51 @@ app.post("/createPO", async (req, res) => {
       throw new Error("Failed to insert production order.");
     }
 
+    const parsedDateStart = new Date(date);
+    if (isNaN(parsedDateStart)) {
+      return res.status(400).json({ message: "Invalid date_start" });
+    }
+
+    // table name based on plant
+    const tableName = getTableName(plant, line);
+
+    const parsedLine = parseLine(line, parsedDateStart, date_week, plant);
+
+    const skuResult = await pool
+      .request()
+      .input("id", sql.VarChar, parsedLine.id)
+      .input("No", sql.VarChar, parsedLine.combined)
+      .input("Week", sql.VarChar, date_week)
+      .input("Week2", sql.VarChar, date_week)
+      .input("Tanggal", sql.DateTime, parsedDateStart)
+      .input("group", sql.VarChar, `${group}.SKU.${material}`)
+      .query(`INSERT INTO dbo.${tableName} (
+                ID
+                ,No
+                ,Week
+                ,Week2
+                ,Tanggal
+                ,DownTime
+                ,TypeDowntime
+                ,datesystem) 
+                VALUES (
+                @id
+                ,@No
+                ,@Week
+                ,@Week2
+                ,@Tanggal
+                ,0
+                ,@group
+                ,GETDATE());`);
+
+    if (skuResult.rowsAffected[0] === 0) {
+      throw new Error("Failed to insert SKU.");
+    }
+
     return res.json({
       id: finalProcessOrderId,
       rowsAffected: orderResult.rowsAffected,
-      message: "Successfully inserted PO from SAP to local database",
+      message: "Successfully inserted PO to local database",
     });
   } catch (error) {
     console.error("Error create PO:", error.message);
@@ -611,7 +652,8 @@ const { getShiftEndTime } = require("./modules");
 
 // API Route to update PO start time and end time
 app.post("/updateStartEndPO", async (req, res) => {
-  const { id, actual_start, actual_end, poStart, poEnd } = req.body;
+  const { id, actual_start, actual_end, poStart, poEnd, plant, line } =
+    req.body;
 
   let pool;
   try {
@@ -640,6 +682,36 @@ app.post("/updateStartEndPO", async (req, res) => {
     if (actual_end) request.input("actualEnd", sql.DateTime, actual_end);
 
     const result = await request.query(query);
+
+    console.log("plan", plant);
+    console.log("line", line);
+    const tableName = getTableName(plant, line);
+    const lineInitial = parseLineInitial(plant, line);
+    const idInitial = `${lineInitial}EG`;
+    console.log("idInitial", idInitial);
+    console.log("actual_start", actual_start);
+    console.log("poStart", poStart);
+
+    if (actual_start) {
+      const queryData = `
+        UPDATE [dbo].[${tableName}]
+        SET Tanggal = @actualStart
+        WHERE ID LIKE @id
+        AND Tanggal = @poStart
+    `;
+
+      const requestData = pool
+        .request()
+        .input("id", sql.VarChar, `${idInitial}%`)
+        .input("actualStart", sql.DateTime, actual_start)
+        .input("poStart", sql.DateTime, poStart);
+
+      const resultData = await requestData.query(queryData);
+      if (resultData.rowsAffected[0] === 0) {
+        console.error("No rows were updated. Check query conditions.");
+      }
+    }
+
     res.status(200).json({ success: true, rowsAffected: result.rowsAffected });
   } catch (error) {
     console.error("Error updating timestamps:", error);
@@ -2244,6 +2316,7 @@ app.post("/getQuantity", async (req, res) => {
     }
 
     const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
+    console.log("lineInitial", lineInitial);
 
     const result = await pool
       .request()
