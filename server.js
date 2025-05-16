@@ -683,14 +683,9 @@ app.post("/updateStartEndPO", async (req, res) => {
 
     const result = await request.query(query);
 
-    console.log("plan", plant);
-    console.log("line", line);
     const tableName = getTableName(plant, line);
     const lineInitial = parseLineInitial(plant, line);
     const idInitial = `${lineInitial}EG`;
-    console.log("idInitial", idInitial);
-    console.log("actual_start", actual_start);
-    console.log("poStart", poStart);
 
     if (actual_start) {
       const queryData = `
@@ -2134,11 +2129,12 @@ app.post("/getQualityLoss", async (req, res) => {
       return res.status(400).json({ message: "Invalid date_end" });
     }
 
-    const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
+    const lineInitial = parseLineInitial(plant, line);
+    const idInitial = `${lineInitial}EG`;
 
     const result = await pool
       .request()
-      .input("line", sql.VarChar, `${lineInitial.combined}`)
+      .input("line", sql.VarChar, `${idInitial}%`)
       .input("start", sql.DateTime, parsedDateStart)
       .input("end", sql.DateTime, parsedDateEnd)
       .query(`SELECT Downtime FROM dbo.${tableName}
