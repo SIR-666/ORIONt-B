@@ -1425,53 +1425,24 @@ app.post("/deleteStoppage", async (req, res) => {
 
       // Check for rowsAffected
       const rowsAffected = result.rowsAffected[0] || 0;
+      const truncatedDate = new Date(stoppageDetails.Date);
+      const lineInitial = parseLineInitial(plant, line);
+      const idInitial = `${lineInitial}DG`;
 
-      let truncatedDate = new Date(stoppageDetails.Date);
-      truncatedDate.setHours(0, 0, 0, 0);
-      const parsedLine = parseLineDowntime(
-        stoppageDetails.Line,
-        stoppageDetails.Date,
-        stoppageDetails.Week,
-        plant
-      );
-      const existingEntry = await pool
+      const queryData = `
+          DELETE FROM [dbo].[${tableName}]
+          WHERE ID LIKE @id
+          AND Tanggal = @date
+        `;
+
+      const requestData = pool
         .request()
-        .input("Downtime", sql.VarChar, `%${stoppageDetails.Jenis}%`)
-        .input("DateOnly", sql.DateTime, truncatedDate)
-        .input("No", sql.VarChar, `${parsedLine.line}%`).query(`
-              SELECT No, Week, Tanggal, Downtime, TypeDowntime FROM dbo.${tableName}
-              WHERE TypeDowntime LIKE @Downtime
-              AND CONVERT(date, Tanggal) = @DateOnly
-              AND No LIKE @No;
-      `);
+        .input("id", sql.VarChar, `${idInitial}%`)
+        .input("date", sql.DateTime, truncatedDate);
 
-      if (existingEntry.recordset && existingEntry.recordset.length > 0) {
-        const currentDuration = parseInt(
-          existingEntry.recordset[0].Downtime,
-          10
-        );
-        const reducedDuration = parseInt(stoppageDetails.Minutes, 10);
-        const newDuration = Math.max(0, currentDuration - reducedDuration);
-
-        const updatedResult = await pool
-          .request()
-          .input("UpdatedDowntime", sql.VarChar, newDuration.toString())
-          .input("EntryTanggal", sql.DateTime, truncatedDate)
-          .input("Downtime", sql.VarChar, `%${stoppageDetails.Jenis}%`)
-          .input("No", sql.VarChar, `${parsedLine.line}%`)
-          .input("id", sql.VarChar, `${parsedLine.id}`).query(`
-                  UPDATE dbo.${tableName}
-                  SET Downtime = @UpdatedDowntime 
-                  WHERE CONVERT(date, Tanggal) = @EntryTanggal
-                  AND TypeDowntime LIKE @Downtime
-                  AND No LIKE @No
-                  AND ID = @id;
-              `);
-        if (updatedResult.rowsAffected[0] > 0) {
-          console.log("Downtime updated successfully.");
-        } else {
-          console.error("No rows were updated. Check query conditions.");
-        }
+      const resultData = await requestData.query(queryData);
+      if (resultData.rowsAffected[0] === 0) {
+        console.error("No rows were updated. Check query conditions.");
       }
 
       // Send the result back with rowsAffected as a number
