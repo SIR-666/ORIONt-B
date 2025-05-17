@@ -1286,21 +1286,7 @@ const { parseLineDowntime } = require("./modules");
 
 app.put("/updateStoppage", async (req, res) => {
   res.setTimeout(120000);
-  const {
-    id,
-    date_start,
-    date_end,
-    date_month,
-    date_week,
-    shift,
-    line,
-    type,
-    machine,
-    code,
-    comments,
-    duration,
-    plant,
-  } = req.body;
+  const { id, date_start, line, type, comments, duration, plant } = req.body;
   let pool;
   let transaction;
 
@@ -1310,36 +1296,51 @@ app.put("/updateStoppage", async (req, res) => {
     // table name based on plant
     const tableName = getTableName(plant, line);
 
-    let currentDowntime = 0;
-
     const statusResult = await pool
       .request()
       .input("id", sql.Int, id)
       .query(
-        `SELECT id, Minutes FROM [dbo].[tb_reasonDowntime] WHERE id = @id`
+        `SELECT id, Minutes, Date FROM [dbo].[tb_reasonDowntime] WHERE id = @id`
       );
 
-    if (statusResult.recordset.length > 0) {
-      currentDowntime = parseInt(statusResult.recordset[0].Minutes);
+    if (statusResult.recordset.length === 0) {
+      return res.status(404).json({ message: "Record not found" });
+    }
+
+    const stoppageDetails = statusResult.recordset[0];
+
+    // Truncate time part for comparison - keep just the date part
+    const truncatedDowntimeDate = new Date(stoppageDetails.Date);
+
+    // Ensure we have a valid date
+    if (!truncatedDowntimeDate) {
+      return res
+        .status(400)
+        .json({ message: "Invalid downtime record: missing date" });
     }
 
     transaction = new sql.Transaction(pool);
     await transaction.begin();
-    let truncatedDate = new Date(date_start);
-    truncatedDate.setHours(0, 0, 0, 0); // Ensure time is reset to midnight
+
+    // Create a valid date object from the input
     const dateStart = new Date(date_start);
     if (isNaN(dateStart)) {
       return res.status(400).json({ message: "Invalid date_start format" });
     }
 
-    const table2Data = parseLineDowntime(line, dateStart, date_week, plant);
+    // Format the downtime date properly
+    const downtimeDate = new Date(stoppageDetails.Date);
+    if (isNaN(downtimeDate)) {
+      return res.status(400).json({ message: "Invalid stored date format" });
+    }
+
     const resultReason = await transaction
       .request()
       .input("id", sql.Int, parseInt(id))
-      .input("date_start", sql.DateTime, date_start)
+      .input("date_start", sql.DateTime, dateStart)
       .input("category", sql.VarChar, type)
       .input("comments", sql.VarChar, comments)
-      .input("duration", sql.Float, duration)
+      .input("duration", sql.Float, parseFloat(duration)) // Ensure duration is a float
       .query(`UPDATE dbo.tb_reasonDowntime 
               SET Date = @date_start, 
               Downtime_Category = @category, 
@@ -1347,6 +1348,7 @@ app.put("/updateStoppage", async (req, res) => {
               Minutes = @duration
               WHERE id = @id;
               `);
+
     if (resultReason.rowsAffected[0] === 0) {
       console.error(
         "No rows were updated. Check if the ID exists:",
@@ -1355,35 +1357,27 @@ app.put("/updateStoppage", async (req, res) => {
       throw new Error("No matching record found for the given ID.");
     }
 
-    const existingEntry = await transaction
+    const lineInitial = parseLineInitial(plant, line);
+    const idInitial = `${lineInitial}DG`;
+
+    const queryData = `
+          UPDATE [dbo].[${tableName}]
+          SET Tanggal = @date_start,
+          Downtime = @duration
+          WHERE ID LIKE @id
+          AND Tanggal = @truncatedDate
+        `;
+
+    const requestData = pool
       .request()
-      .input("Downtime", sql.VarChar, `%${code}%`)
-      .input("DateOnly", sql.DateTime, truncatedDate)
-      .input("No", sql.VarChar, `${table2Data.line}%`).query(`
-              SELECT No, Week, Tanggal, Downtime, TypeDowntime FROM dbo.${tableName}
-              WHERE TypeDowntime LIKE @Downtime
-              AND CONVERT(date, Tanggal) = @DateOnly
-              AND No LIKE @No;
-          `);
+      .input("id", sql.VarChar, `${idInitial}%`)
+      .input("date_start", sql.DateTime, dateStart)
+      .input("duration", sql.Float, parseFloat(duration))
+      .input("truncatedDate", sql.DateTime, truncatedDowntimeDate); // Use Date type for date-only comparison
 
-    if (existingEntry.recordset && existingEntry.recordset.length > 0) {
-      const currentDuration = parseInt(existingEntry.recordset[0].Downtime, 10);
-      const newDuration = currentDuration + duration - currentDowntime;
-
-      await transaction
-        .request()
-        .input("UpdatedDowntime", sql.VarChar, newDuration.toString())
-        .input("EntryTanggal", sql.DateTime, truncatedDate)
-        .input("Downtime", sql.VarChar, `%${code}%`)
-        .input("No", sql.VarChar, `${table2Data.line}%`)
-        .input("id", sql.VarChar, `${table2Data.id}`).query(`
-                  UPDATE dbo.${tableName}
-                  SET Downtime = @UpdatedDowntime 
-                  WHERE CONVERT(date, Tanggal) = @EntryTanggal
-                  AND TypeDowntime LIKE @Downtime
-                  AND No LIKE @No
-                  AND ID = id
-              `);
+    const resultData = await requestData.query(queryData);
+    if (resultData.rowsAffected[0] === 0) {
+      console.error("No rows were updated. Check query conditions.");
     }
 
     await transaction.commit();
