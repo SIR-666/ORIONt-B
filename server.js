@@ -1004,7 +1004,7 @@ app.get("/getDowntimeId/:id", async (req, res) => {
   try {
     let pool = await sql.connect(config);
 
-    const query = `SELECT id, Date, Downtime_Category, Mesin, Jenis, Keterangan FROM dbo.tb_reasonDowntime where id = @id;`;
+    const query = `SELECT id, Date, Downtime_Category, Mesin, Jenis, Keterangan, Minutes FROM dbo.tb_reasonDowntime where id = @id;`;
 
     const result = await pool
       .request()
