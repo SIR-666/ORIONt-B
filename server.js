@@ -6,7 +6,7 @@ const config = require("./config");
 const moment = require("moment");
 
 const app = express();
-const port = process.env.PORT_1 | 3001;
+const port = process.env.PORT_1 | 3009;
 app.use(cors());
 app.use(express.json());
 
