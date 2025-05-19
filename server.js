@@ -7,7 +7,7 @@ const moment = require("moment");
 const logger = require("./logger");
 
 const app = express();
-const port = process.env.PORT_1 | 3009;
+const port = process.env.PORT_1 | 3001;
 app.use(cors());
 app.use(express.json());
 
