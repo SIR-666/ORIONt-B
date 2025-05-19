@@ -4,6 +4,7 @@ const cors = require("cors");
 const sql = require("mssql");
 const config = require("./config");
 const moment = require("moment");
+const logger = require("./logger");
 
 const app = express();
 const port = process.env.PORT_1 | 3009;
@@ -83,12 +84,13 @@ const {
   getTableName,
   getProductionName,
   parseLineSpeedLoss,
+  parseLineWIB,
   parseLineInitial,
 } = require("./modules");
 
 // insert PO from SAP to local database
 app.post("/createPO", async (req, res) => {
-  const { id, date, line, group, plant } = req.body;
+  const { id, date, line, group, plant, date_week } = req.body;
 
   try {
     const pool = await sql.connect(config);
@@ -101,19 +103,6 @@ app.post("/createPO", async (req, res) => {
       );
 
     const groupId = groupResult.recordset[0]?.id;
-
-    const time = new Date(date);
-    const year = time.getFullYear();
-    const month = time.getMonth() + 1;
-
-    const sapUrl =
-      plant === "Milk Processing"
-        ? `http://10.24.7.70:8080/getProcessOrderSAP/${year}/${month}/SFP%20ESL/SFP%20UHT`
-        : plant === "Yogurt"
-        ? `http://10.24.7.70:8080/getProcessOrderSAP/${year}/${month}/YOGURT`
-        : plant === "Cheese"
-        ? `http://10.24.7.70:8080/getProcessOrderSAP/${year}/${month}/MOZZ/RICOTTA`
-        : `http://10.24.7.70:8080/getProcessOrderSAP/${year}/${month}/GF%20MILK`;
 
     let allData;
     if (plant === "Yogurt" && line === "PASTEURIZER") {
@@ -129,30 +118,7 @@ app.post("/createPO", async (req, res) => {
         .json({ message: `Record with NO PROCESS ORDER ${id} not found.` });
     }
 
-    let baseId;
-
-    if (
-      plant === "Milk Processing" ||
-      plant === "Yogurt" ||
-      plant === "Cheese" ||
-      plant === "Milk Filling Packing"
-    ) {
-      baseId = 800100000000;
-      let idExists = true;
-
-      while (idExists) {
-        const idCheckResult = await pool
-          .request()
-          .input("id", sql.BigInt, baseId)
-          .query("SELECT 1 FROM [dbo].[ProductionOrder] WHERE id = @id;");
-
-        if (idCheckResult.recordset.length === 0) {
-          idExists = false;
-        } else {
-          baseId++;
-        }
-      }
-    }
+    const baseId = Date.now();
 
     const {
       "NO PROCESS ORDER": noProcessOrder,
@@ -182,8 +148,6 @@ app.post("/createPO", async (req, res) => {
     const localDateTimeEnd = formatDateTime(endDate, endTime);
 
     const cleanedQty = qty.replace(/,/g, "");
-    const qtyFloat = isNaN(parseFloat(cleanedQty)) ? 0 : parseFloat(cleanedQty);
-    // const qtyInt = isNaN(parseInt(cleanedQty)) ? 0 : parseInt(cleanedQty);
     let finalQtyInt;
 
     if (qty.includes(",") || qty.includes(".")) {
@@ -237,10 +201,51 @@ app.post("/createPO", async (req, res) => {
       throw new Error("Failed to insert production order.");
     }
 
+    const parsedDateStart = new Date(date);
+    if (isNaN(parsedDateStart)) {
+      return res.status(400).json({ message: "Invalid date_start" });
+    }
+
+    // table name based on plant
+    const tableName = getTableName(plant, line);
+
+    const parsedLine = parseLine(line, parsedDateStart, date_week, plant);
+
+    const skuResult = await pool
+      .request()
+      .input("id", sql.VarChar, parsedLine.id)
+      .input("No", sql.VarChar, parsedLine.combined)
+      .input("Week", sql.VarChar, date_week)
+      .input("Week2", sql.VarChar, date_week)
+      .input("Tanggal", sql.DateTime, parsedDateStart)
+      .input("group", sql.VarChar, `${group}.SKU.${material}`)
+      .query(`INSERT INTO dbo.${tableName} (
+                ID
+                ,No
+                ,Week
+                ,Week2
+                ,Tanggal
+                ,DownTime
+                ,TypeDowntime
+                ,datesystem) 
+                VALUES (
+                @id
+                ,@No
+                ,@Week
+                ,@Week2
+                ,@Tanggal
+                ,0
+                ,@group
+                ,GETDATE());`);
+
+    if (skuResult.rowsAffected[0] === 0) {
+      throw new Error("Failed to insert SKU.");
+    }
+
     return res.json({
       id: finalProcessOrderId,
       rowsAffected: orderResult.rowsAffected,
-      message: "Successfully inserted PO from SAP to local database",
+      message: "Successfully inserted PO to local database",
     });
   } catch (error) {
     console.error("Error create PO:", error.message);
@@ -255,21 +260,7 @@ app.post("/createEmptyPO", async (req, res) => {
   try {
     let pool = await sql.connect(config);
 
-    let baseId = 666666000000;
-    let idExists = true;
-
-    while (idExists) {
-      const idCheckResult = await pool
-        .request()
-        .input("id", sql.BigInt, baseId)
-        .query("SELECT 1 FROM [dbo].[ProductionOrder] WHERE id = @id;");
-
-      if (idCheckResult.recordset.length === 0) {
-        idExists = false; // Unique ID found
-      } else {
-        baseId++; // Increment ID
-      }
-    }
+    const baseId = Date.now();
 
     let insertOrderQuery;
     if (groupSelection && Object.keys(groupSelection).length > 1) {
@@ -661,7 +652,8 @@ const { getShiftEndTime } = require("./modules");
 
 // API Route to update PO start time and end time
 app.post("/updateStartEndPO", async (req, res) => {
-  const { id, actual_start, actual_end, poStart, poEnd } = req.body;
+  const { id, actual_start, actual_end, poStart, poEnd, plant, line } =
+    req.body;
 
   let pool;
   try {
@@ -690,6 +682,31 @@ app.post("/updateStartEndPO", async (req, res) => {
     if (actual_end) request.input("actualEnd", sql.DateTime, actual_end);
 
     const result = await request.query(query);
+
+    const tableName = getTableName(plant, line);
+    const lineInitial = parseLineInitial(plant, line);
+    const idInitial = `${lineInitial}EG`;
+
+    if (actual_start) {
+      const queryData = `
+        UPDATE [dbo].[${tableName}]
+        SET Tanggal = @actualStart
+        WHERE ID LIKE @id
+        AND Tanggal = @poStart
+    `;
+
+      const requestData = pool
+        .request()
+        .input("id", sql.VarChar, `${idInitial}%`)
+        .input("actualStart", sql.DateTime, actual_start)
+        .input("poStart", sql.DateTime, poStart);
+
+      const resultData = await requestData.query(queryData);
+      if (resultData.rowsAffected[0] === 0) {
+        console.error("No rows were updated. Check query conditions.");
+      }
+    }
+
     res.status(200).json({ success: true, rowsAffected: result.rowsAffected });
   } catch (error) {
     console.error("Error updating timestamps:", error);
@@ -1269,21 +1286,7 @@ const { parseLineDowntime } = require("./modules");
 
 app.put("/updateStoppage", async (req, res) => {
   res.setTimeout(120000);
-  const {
-    id,
-    date_start,
-    date_end,
-    date_month,
-    date_week,
-    shift,
-    line,
-    type,
-    machine,
-    code,
-    comments,
-    duration,
-    plant,
-  } = req.body;
+  const { id, date_start, line, type, comments, duration, plant } = req.body;
   let pool;
   let transaction;
 
@@ -1293,36 +1296,51 @@ app.put("/updateStoppage", async (req, res) => {
     // table name based on plant
     const tableName = getTableName(plant, line);
 
-    let currentDowntime = 0;
-
     const statusResult = await pool
       .request()
       .input("id", sql.Int, id)
       .query(
-        `SELECT id, Minutes FROM [dbo].[tb_reasonDowntime] WHERE id = @id`
+        `SELECT id, Minutes, Date FROM [dbo].[tb_reasonDowntime] WHERE id = @id`
       );
 
-    if (statusResult.recordset.length > 0) {
-      currentDowntime = parseInt(statusResult.recordset[0].Minutes);
+    if (statusResult.recordset.length === 0) {
+      return res.status(404).json({ message: "Record not found" });
+    }
+
+    const stoppageDetails = statusResult.recordset[0];
+
+    // Truncate time part for comparison - keep just the date part
+    const truncatedDowntimeDate = new Date(stoppageDetails.Date);
+
+    // Ensure we have a valid date
+    if (!truncatedDowntimeDate) {
+      return res
+        .status(400)
+        .json({ message: "Invalid downtime record: missing date" });
     }
 
     transaction = new sql.Transaction(pool);
     await transaction.begin();
-    let truncatedDate = new Date(date_start);
-    truncatedDate.setHours(0, 0, 0, 0); // Ensure time is reset to midnight
+
+    // Create a valid date object from the input
     const dateStart = new Date(date_start);
     if (isNaN(dateStart)) {
       return res.status(400).json({ message: "Invalid date_start format" });
     }
 
-    const table2Data = parseLineDowntime(line, dateStart, date_week, plant);
+    // Format the downtime date properly
+    const downtimeDate = new Date(stoppageDetails.Date);
+    if (isNaN(downtimeDate)) {
+      return res.status(400).json({ message: "Invalid stored date format" });
+    }
+
     const resultReason = await transaction
       .request()
       .input("id", sql.Int, parseInt(id))
-      .input("date_start", sql.DateTime, date_start)
+      .input("date_start", sql.DateTime, dateStart)
       .input("category", sql.VarChar, type)
       .input("comments", sql.VarChar, comments)
-      .input("duration", sql.Float, duration)
+      .input("duration", sql.Float, parseFloat(duration)) // Ensure duration is a float
       .query(`UPDATE dbo.tb_reasonDowntime 
               SET Date = @date_start, 
               Downtime_Category = @category, 
@@ -1330,6 +1348,7 @@ app.put("/updateStoppage", async (req, res) => {
               Minutes = @duration
               WHERE id = @id;
               `);
+
     if (resultReason.rowsAffected[0] === 0) {
       console.error(
         "No rows were updated. Check if the ID exists:",
@@ -1338,35 +1357,27 @@ app.put("/updateStoppage", async (req, res) => {
       throw new Error("No matching record found for the given ID.");
     }
 
-    const existingEntry = await transaction
+    const lineInitial = parseLineInitial(plant, line);
+    const idInitial = `${lineInitial}DG`;
+
+    const queryData = `
+          UPDATE [dbo].[${tableName}]
+          SET Tanggal = @date_start,
+          Downtime = @duration
+          WHERE ID LIKE @id
+          AND Tanggal = @truncatedDate
+        `;
+
+    const requestData = pool
       .request()
-      .input("Downtime", sql.VarChar, `%${code}%`)
-      .input("DateOnly", sql.DateTime, truncatedDate)
-      .input("No", sql.VarChar, `${table2Data.line}%`).query(`
-              SELECT No, Week, Tanggal, Downtime, TypeDowntime FROM dbo.${tableName}
-              WHERE TypeDowntime LIKE @Downtime
-              AND CONVERT(date, Tanggal) = @DateOnly
-              AND No LIKE @No;
-          `);
+      .input("id", sql.VarChar, `${idInitial}%`)
+      .input("date_start", sql.DateTime, dateStart)
+      .input("duration", sql.Float, parseFloat(duration))
+      .input("truncatedDate", sql.DateTime, truncatedDowntimeDate); // Use Date type for date-only comparison
 
-    if (existingEntry.recordset && existingEntry.recordset.length > 0) {
-      const currentDuration = parseInt(existingEntry.recordset[0].Downtime, 10);
-      const newDuration = currentDuration + duration - currentDowntime;
-
-      await transaction
-        .request()
-        .input("UpdatedDowntime", sql.VarChar, newDuration.toString())
-        .input("EntryTanggal", sql.DateTime, truncatedDate)
-        .input("Downtime", sql.VarChar, `%${code}%`)
-        .input("No", sql.VarChar, `${table2Data.line}%`)
-        .input("id", sql.VarChar, `${table2Data.id}`).query(`
-                  UPDATE dbo.${tableName}
-                  SET Downtime = @UpdatedDowntime 
-                  WHERE CONVERT(date, Tanggal) = @EntryTanggal
-                  AND TypeDowntime LIKE @Downtime
-                  AND No LIKE @No
-                  AND ID = id
-              `);
+    const resultData = await requestData.query(queryData);
+    if (resultData.rowsAffected[0] === 0) {
+      console.error("No rows were updated. Check query conditions.");
     }
 
     await transaction.commit();
@@ -1408,53 +1419,24 @@ app.post("/deleteStoppage", async (req, res) => {
 
       // Check for rowsAffected
       const rowsAffected = result.rowsAffected[0] || 0;
+      const truncatedDate = new Date(stoppageDetails.Date);
+      const lineInitial = parseLineInitial(plant, line);
+      const idInitial = `${lineInitial}DG`;
 
-      let truncatedDate = new Date(stoppageDetails.Date);
-      truncatedDate.setHours(0, 0, 0, 0);
-      const parsedLine = parseLineDowntime(
-        stoppageDetails.Line,
-        stoppageDetails.Date,
-        stoppageDetails.Week,
-        plant
-      );
-      const existingEntry = await pool
+      const queryData = `
+          DELETE FROM [dbo].[${tableName}]
+          WHERE ID LIKE @id
+          AND Tanggal = @date
+        `;
+
+      const requestData = pool
         .request()
-        .input("Downtime", sql.VarChar, `%${stoppageDetails.Jenis}%`)
-        .input("DateOnly", sql.DateTime, truncatedDate)
-        .input("No", sql.VarChar, `${parsedLine.line}%`).query(`
-              SELECT No, Week, Tanggal, Downtime, TypeDowntime FROM dbo.${tableName}
-              WHERE TypeDowntime LIKE @Downtime
-              AND CONVERT(date, Tanggal) = @DateOnly
-              AND No LIKE @No;
-      `);
+        .input("id", sql.VarChar, `${idInitial}%`)
+        .input("date", sql.DateTime, truncatedDate);
 
-      if (existingEntry.recordset && existingEntry.recordset.length > 0) {
-        const currentDuration = parseInt(
-          existingEntry.recordset[0].Downtime,
-          10
-        );
-        const reducedDuration = parseInt(stoppageDetails.Minutes, 10);
-        const newDuration = Math.max(0, currentDuration - reducedDuration);
-
-        const updatedResult = await pool
-          .request()
-          .input("UpdatedDowntime", sql.VarChar, newDuration.toString())
-          .input("EntryTanggal", sql.DateTime, truncatedDate)
-          .input("Downtime", sql.VarChar, `%${stoppageDetails.Jenis}%`)
-          .input("No", sql.VarChar, `${parsedLine.line}%`)
-          .input("id", sql.VarChar, `${parsedLine.id}`).query(`
-                  UPDATE dbo.${tableName}
-                  SET Downtime = @UpdatedDowntime 
-                  WHERE CONVERT(date, Tanggal) = @EntryTanggal
-                  AND TypeDowntime LIKE @Downtime
-                  AND No LIKE @No
-                  AND ID = @id;
-              `);
-        if (updatedResult.rowsAffected[0] > 0) {
-          console.log("Downtime updated successfully.");
-        } else {
-          console.error("No rows were updated. Check query conditions.");
-        }
+      const resultData = await requestData.query(queryData);
+      if (resultData.rowsAffected[0] === 0) {
+        console.error("No rows were updated. Check query conditions.");
       }
 
       // Send the result back with rowsAffected as a number
@@ -1918,6 +1900,9 @@ app.post("/insertPerformance", async (req, res) => {
 
     // table name based on plant
     const tableName = getTableName(plant, line);
+    logger.info(
+      `insertPerformance | tableName=${tableName}, plant=${plant}, line=${line}`
+    );
 
     const parsedDateStart = new Date(startTime);
     if (isNaN(parsedDateStart.getTime())) {
@@ -1925,6 +1910,9 @@ app.post("/insertPerformance", async (req, res) => {
     }
 
     const parsedLine = parseLine(line, parsedDateStart, date_week, plant);
+    logger.info(
+      `insertPerformance | combined=${parsedLine.combined}, id=${parsedLine.id}, line=${parsedLine.line}`
+    );
 
     const netValue = net ? net.toString() : "0";
     const runningValue = running ? running.toString() : "0";
@@ -2079,8 +2067,7 @@ app.post("/insertPerformance", async (req, res) => {
     await upsertData("NOT REPORTED", nReportedValue);
     await upsertData("UT-No PO", utValue);
   } catch (error) {
-    console.error("Insertion of performance data failed", error.message);
-
+    logger.error(`insertPerformance | Error: ${error.message}`);
     res
       .status(500)
       .json({ message: "Internal Server Error", error: error.message });
@@ -2107,11 +2094,12 @@ app.post("/getQualityLoss", async (req, res) => {
       return res.status(400).json({ message: "Invalid date_end" });
     }
 
-    const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
+    const lineInitial = parseLineInitial(plant, line);
+    const idInitial = `${lineInitial}EG`;
 
     const result = await pool
       .request()
-      .input("line", sql.VarChar, `${lineInitial.combined}`)
+      .input("line", sql.VarChar, `${idInitial}%`)
       .input("start", sql.DateTime, parsedDateStart)
       .input("end", sql.DateTime, parsedDateEnd)
       .query(`SELECT Downtime FROM dbo.${tableName}
@@ -2201,12 +2189,12 @@ app.post("/getSpeedLoss", async (req, res) => {
       return res.status(400).json({ message: "Invalid date_end" });
     }
 
-    const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
-    console.log(lineInitial.combined);
+    const lineInitial = parseLineInitial(plant, line);
+    const idInitial = `${lineInitial}EG`;
 
     const result = await pool
       .request()
-      .input("line", sql.VarChar, `${lineInitial.combined}`)
+      .input("line", sql.VarChar, `${idInitial}%`)
       .input("start", sql.DateTime, parsedDateStart)
       .input("end", sql.DateTime, parsedDateEnd)
       .query(`SELECT Tanggal, Downtime FROM dbo.${tableName} 
@@ -2289,11 +2277,12 @@ app.post("/getQuantity", async (req, res) => {
       return res.status(400).json({ message: "Invalid date_end" });
     }
 
-    const lineInitial = parseLineSpeedLoss(line, parsedDateStart, plant);
+    const lineInitial = parseLineInitial(plant, line);
+    const idInitial = `${lineInitial}EG`;
 
     const result = await pool
       .request()
-      .input("line", sql.VarChar, `${lineInitial.combined}`)
+      .input("line", sql.VarChar, `${idInitial}%`)
       .input("start", sql.DateTime, parsedDateStart)
       .input("end", sql.DateTime, parsedDateEnd)
       .query(`SELECT Downtime FROM dbo.${tableName} 
@@ -2302,6 +2291,7 @@ app.post("/getQuantity", async (req, res) => {
       AND Tanggal >= @start
       AND Tanggal < @end
       order by Tanggal;`);
+
     res.status(200).json(result.recordset);
   } catch (error) {
     console.error(error);
