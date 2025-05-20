@@ -2615,7 +2615,12 @@ app.get("/getHistoryFinishGood", async (req, res) => {
       INNER JOIN dbo.Product prod
         ON p.product_id = prod.id
       WHERE CONVERT(date, d.Tanggal) BETWEEN CONVERT(date, DATEADD(DAY, -1, GETDATE())) AND CONVERT(date, GETDATE())
-        AND d.TypeDowntime LIKE @productionName
+        AND (
+          d.TypeDowntime LIKE @productionName OR
+          d.TypeDowntime LIKE '%Reject filling(Pcs)%' OR
+          d.TypeDowntime LIKE '%Reject packing (Pcs)%' OR
+          d.TypeDowntime LIKE '%Sample (pcs)%'
+        )
         AND d.No LIKE @lineInitial
       ORDER BY d.Tanggal DESC;
     `;
@@ -2627,23 +2632,41 @@ app.get("/getHistoryFinishGood", async (req, res) => {
       .input("lineInitial", sql.VarChar, `${lineInitial}%`)
       .query(query);
 
-    const formattedData = result.recordset.map((item) => {
-      const [group, ...typeParts] = item.TypeDowntime.includes(".")
-        ? item.TypeDowntime.split(".")
-        : ["-", item.TypeDowntime];
-      const typeDowntime = typeParts.join(".");
+    const groupedData = {};
 
-      return {
-        tanggal: moment.utc(item.Tanggal).format("DD-MM-YYYY HH:mm:ss"),
-        downtime: item.Downtime,
-        typeDowntime: typeDowntime,
-        group: group,
-        productSku: item.product_sku,
-        status: item.status,
-        productionLine: item.production_line,
-      };
+    result.recordset.forEach((item) => {
+      const key = `${item.Tanggal.toISOString()}_${item.product_id}`;
+
+      if (!groupedData[key]) {
+        groupedData[key] = {
+          tanggal: moment.utc(item.Tanggal).format("DD-MM-YYYY HH:mm:ss"),
+          productSku: item.product_sku,
+          status: item.status,
+          productionLine: item.production_line,
+          group: item.TypeDowntime.includes(".")
+            ? item.TypeDowntime.split(".")[0]
+            : "-",
+          quantity: 0,
+          rejectFilling: 0,
+          rejectPacking: 0,
+          sample: 0,
+        };
+      }
+
+      const type = item.TypeDowntime.toLowerCase();
+
+      if (type.includes(productionName.toLowerCase())) {
+        groupedData[key].quantity += Number(item.Downtime);
+      } else if (type.includes("reject filling")) {
+        groupedData[key].rejectFilling += Number(item.Downtime);
+      } else if (type.includes("reject packing")) {
+        groupedData[key].rejectPacking += Number(item.Downtime);
+      } else if (type.includes("sample")) {
+        groupedData[key].sample += Number(item.Downtime);
+      }
     });
 
+    const formattedData = Object.values(groupedData);
     res.json(formattedData);
   } catch (error) {
     console.error(error);
