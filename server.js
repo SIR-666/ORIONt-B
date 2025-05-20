@@ -82,6 +82,7 @@ const {
   formatDateTime,
   getOrCreateProduct,
   getTableName,
+  getTablePerformName,
   getProductionName,
   parseLineSpeedLoss,
   parseLineWIB,
@@ -1025,28 +1026,34 @@ app.get("/getAllPerformance", async (req, res) => {
     let pool = await sql.connect(config);
 
     // table name based on plant
-    const tableName = getTableName(plant, line);
+    const tableName = getTablePerformName(plant, line);
+
+    // const query = `
+    //   SELECT
+    //     ID,
+    //     Tanggal,
+    //     LEFT(TypeDowntime, 1) AS DowntimeGroup,
+    //     MAX(CASE WHEN TypeDowntime LIKE '%UT%' THEN Downtime ELSE NULL END) AS UnavailableTime,
+    //     MAX(CASE WHEN TypeDowntime LIKE '%activity%' THEN Downtime ELSE NULL END) AS ProductionTime,
+    //     MAX(CASE WHEN TypeDowntime LIKE '%operational%' THEN Downtime ELSE NULL END) AS OperationTime,
+    //     MAX(CASE WHEN TypeDowntime LIKE '%net%' THEN Downtime ELSE NULL END) AS NPT,
+    //     MAX(CASE WHEN TypeDowntime LIKE '%running%' THEN Downtime ELSE NULL END) AS RunningTime,
+    //     MAX(CASE WHEN TypeDowntime LIKE '%.available%' THEN Downtime ELSE NULL END) AS AvailableTime,
+    //     MAX(CASE WHEN TypeDowntime LIKE '%breakdown%' THEN Downtime ELSE NULL END) AS Breakdown,
+    //     MAX(CASE WHEN TypeDowntime LIKE '%planned stop%' THEN Downtime ELSE NULL END) AS Planned,
+    //     MAX(CASE WHEN TypeDowntime LIKE '%process wait%' THEN Downtime ELSE NULL END) AS ProcessWaiting,
+    //     MAX(CASE WHEN TypeDowntime LIKE '%quality%' THEN Downtime ELSE NULL END) AS QualityLoss,
+    //     MAX(CASE WHEN TypeDowntime LIKE '%speed%' THEN Downtime ELSE NULL END) AS SpeedLoss
+    //   FROM dbo.${tableName}
+    //   WHERE No LIKE '_E___'
+    //   GROUP BY ID, Tanggal, LEFT(TypeDowntime, 1)
+    //   order by Tanggal;`;
 
     const query = `
       SELECT
-        ID, 
-        Tanggal, 
-        LEFT(TypeDowntime, 1) AS DowntimeGroup,
-        MAX(CASE WHEN TypeDowntime LIKE '%UT%' THEN Downtime ELSE NULL END) AS UnavailableTime,
-        MAX(CASE WHEN TypeDowntime LIKE '%activity%' THEN Downtime ELSE NULL END) AS ProductionTime,
-        MAX(CASE WHEN TypeDowntime LIKE '%operational%' THEN Downtime ELSE NULL END) AS OperationTime,
-        MAX(CASE WHEN TypeDowntime LIKE '%net%' THEN Downtime ELSE NULL END) AS NPT,
-        MAX(CASE WHEN TypeDowntime LIKE '%running%' THEN Downtime ELSE NULL END) AS RunningTime, 
-        MAX(CASE WHEN TypeDowntime LIKE '%.available%' THEN Downtime ELSE NULL END) AS AvailableTime,
-        MAX(CASE WHEN TypeDowntime LIKE '%breakdown%' THEN Downtime ELSE NULL END) AS Breakdown,
-        MAX(CASE WHEN TypeDowntime LIKE '%planned stop%' THEN Downtime ELSE NULL END) AS Planned,
-        MAX(CASE WHEN TypeDowntime LIKE '%process wait%' THEN Downtime ELSE NULL END) AS ProcessWaiting,
-        MAX(CASE WHEN TypeDowntime LIKE '%quality%' THEN Downtime ELSE NULL END) AS QualityLoss, 
-        MAX(CASE WHEN TypeDowntime LIKE '%speed%' THEN Downtime ELSE NULL END) AS SpeedLoss 
+        *
       FROM dbo.${tableName}
-      WHERE No LIKE '_E___'
-      GROUP BY ID, Tanggal, LEFT(TypeDowntime, 1)
-      order by Tanggal;`;
+      order by Tanggal2;`;
 
     const result = await pool.request().query(query);
 

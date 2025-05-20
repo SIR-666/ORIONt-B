@@ -715,6 +715,33 @@ function getTableName(plant, line) {
   return tableMapping[plant] || null;
 }
 
+//table performance report
+function getTablePerformName(plant, line) {
+  const tableMapping = {
+    "Milk Processing": "PBI_plant_oee_daily_f_2224",
+    "Milk Filling Packing": "PBI_plant_oee_daily_pro_2224",
+    Cheese: "PBI_plant_oee_daily_chs_2224",
+  };
+
+  if (plant === "Yogurt") {
+    const upperLine = line?.toUpperCase() || "";
+
+    if (["YA", "YB", "YD (POUCH)"].includes(upperLine)) {
+      return "PBI_plant_oee_daily_y_2224";
+    } else if (upperLine === "YRTD") {
+      return "PBI_plant_oee_daily_y_2224";
+    } else if (upperLine === "PASTEURIZER") {
+      return "PBI_plant_oee_daily_pasteur_ygt_2224";
+    }
+
+    // Default fallback jika line tidak cocok
+    return "PBI_plant_oee_daily_y_2224";
+  }
+
+  // Untuk plant lain
+  return tableMapping[plant] || null;
+}
+
 function getProductionName(plant, line) {
   const tableMapping = {
     "Milk Processing": "HASIL PRODUKSI (AFT LOSS)",
@@ -751,5 +778,6 @@ module.exports = {
   formatDateTime,
   getOrCreateProduct,
   getTableName,
+  getTablePerformName,
   getProductionName,
 };
