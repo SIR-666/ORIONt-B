@@ -718,8 +718,8 @@ function getTableName(plant, line) {
 //table performance report
 function getTablePerformName(plant, line) {
   const tableMapping = {
-    "Milk Processing": "PBI_plant_oee_daily_f_2224",
-    "Milk Filling Packing": "PBI_plant_oee_daily_pro_2224",
+    "Milk Processing": "PBI_plant_oee_daily_pro_2224",
+    "Milk Filling Packing": "PBI_plant_oee_daily_f_2224",
     Cheese: "PBI_plant_oee_daily_chs_2224",
   };
 

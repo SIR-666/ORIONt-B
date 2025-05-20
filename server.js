@@ -1048,6 +1048,9 @@ app.get("/getAllPerformance", async (req, res) => {
     //   WHERE No LIKE '_E___'
     //   GROUP BY ID, Tanggal, LEFT(TypeDowntime, 1)
     //   order by Tanggal;`;
+    console.log("plant : ", plant);
+    console.log("line : ", line);
+    console.log("table name : ", tableName);
 
     const query = `
       SELECT
@@ -1056,7 +1059,7 @@ app.get("/getAllPerformance", async (req, res) => {
       order by Tanggal2;`;
 
     const result = await pool.request().query(query);
-
+    // console.log("result: ", result);
     res.json(result.recordset);
   } catch (error) {
     console.error(error);
