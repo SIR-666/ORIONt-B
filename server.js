@@ -1812,10 +1812,6 @@ app.post("/insertQualLoss", async (req, res) => {
     const unplannedCipValue = convertValue(unplannedCip);
 
     const upsertData = async (type, value) => {
-      if (value === "0") {
-        return; // Skip jika value 0 atau tidak dikirim
-      }
-
       const existingEntry = await pool
         .request()
         .input("DateOnly", sql.DateTime, parsedDateStart)
