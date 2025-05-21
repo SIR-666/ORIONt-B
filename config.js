@@ -3,10 +3,10 @@ const dotenv = require("dotenv");
 dotenv.config();
 
 const config = {
-  user: process.env.DATABASE_USER,
-  password: process.env.DATABASE_PASSWORD,
-  server: process.env.DATABASE_SERVER,
-  database: process.env.DATABASE_NAME,
+  user: "admin_prf",
+  password: "!23QWE45d",
+  server: "10.24.0.98",
+  database: "dbOR_new",
   pool: {
     max: 10, // Maximum number of connections in the pool
     min: 0, // Minimum number of connections in the pool

@@ -1056,7 +1056,7 @@ app.get("/getAllPerformance", async (req, res) => {
       SELECT
         *
       FROM dbo.${tableName}
-      order by Tanggal2;`;
+      order by Tanggal2 asc;`;
 
     const result = await pool.request().query(query);
     // console.log("result: ", result);
