@@ -513,7 +513,7 @@ app.get("/getAllPO/:line/:shift/:date", async (req, res) => {
       .input("line", sql.VarChar, line)
       .input("start", sql.DateTime, getStartEndTime.start)
       .input("end", sql.DateTime, getStartEndTime.end)
-      .query(`SELECT PO.id, P.sku, PO.qty, PO.date_start, PO.date_end, PO.status, PO.actual_start, PO.actual_end, PO.plant, PO.line,PO.group  
+      .query(`SELECT PO.id, P.sku, PO.qty, PO.date_start, PO.date_end, PO.status, PO.actual_start, PO.actual_end, PO.plant, PO.line, PO.[group]  
         FROM ProductionOrder PO 
         INNER JOIN Product P 
         ON PO.product_id = P.id 
@@ -583,7 +583,7 @@ app.post("/getAllPOShift", async (req, res) => {
       .input("line", sql.VarChar, line)
       .input("start", sql.DateTime, date_start)
       .input("end", sql.DateTime, date_end)
-      .query(`SELECT PO.id, PO.product_id, P.sku, PO.qty, PO.date_start, PO.date_end, PO.status, PO.actual_start, PO.actual_end, PO.plant, PO.line
+      .query(`SELECT PO.id, PO.product_id, P.sku, PO.qty, PO.date_start, PO.date_end, PO.status, PO.actual_start, PO.actual_end, PO.plant, PO.line, PO.[group]
       FROM ProductionOrder PO
       INNER JOIN Product P
         ON PO.product_id = P.id
@@ -2350,7 +2350,7 @@ app.get("/getProducts", async (req, res) => {
       request.input(`id${index}`, sql.Int, id);
     });
 
-    const query = `SELECT id, sku, speed FROM Product WHERE id IN (${idArray
+    const query = `SELECT id, sku, volume, speed FROM Product WHERE id IN (${idArray
       .map((_, i) => `@id${i}`)
       .join(",")})`;
     const result = await request.query(query);
