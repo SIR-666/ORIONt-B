@@ -2508,6 +2508,31 @@ app.get("/getHistoryFinishGood", async (req, res) => {
   }
 });
 
+app.get("/getFinishGoodLiter", async (req, res) => {
+  try {
+    let pool = await sql.connect(config);
+
+    const query = `
+      SELECT 
+        Plant, 
+        Line, 
+        TanggalProduksi,
+        SUM(FinishGoodPcs) AS FinishGoodPcs,
+        ROUND(SUM(FinishGoodLiter), 2) AS FinishGoodLiter
+      FROM dbo.VW_Filling_FinishGoodLiter
+      GROUP BY Plant, Line, TanggalProduksi
+      ORDER BY TanggalProduksi DESC;
+    `;
+
+    const result = await pool.request().query(query);
+
+    res.json(result.recordset);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
 app.get("/getMasterDowntime", async (req, res) => {
   try {
     let pool = await sql.connect(config);
