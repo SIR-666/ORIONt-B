@@ -742,6 +742,32 @@ function getTablePerformName(plant, line) {
   return tableMapping[plant] || null;
 }
 
+function getViewFinishGoodLiter(plant, line) {
+  const tableMapping = {
+    "Milk Processing": "VW_Filling_FinishGoodLiter",
+    "Milk Filling Packing": "VW_Filling_FinishGoodLiter",
+    Cheese: "VW_Filling_FinishGoodLiter",
+  };
+
+  if (plant === "Yogurt") {
+    const upperLine = line?.toUpperCase() || "";
+
+    if (["YA", "YB", "YD (POUCH)"].includes(upperLine)) {
+      return "VW_Filling_FinishGoodLiter";
+    } else if (upperLine === "YRTD") {
+      return "VW_Filling_FinishGoodLiter";
+    } else if (upperLine === "PASTEURIZER") {
+      return "VW_Filling_FinishGoodLiter";
+    }
+
+    // Default fallback jika line tidak cocok
+    return "VW_Filling_FinishGoodLiter";
+  }
+
+  // Untuk plant lain
+  return tableMapping[plant] || null;
+}
+
 function getProductionName(plant, line) {
   const tableMapping = {
     "Milk Processing": "HASIL PRODUKSI (AFT LOSS)",
@@ -779,5 +805,6 @@ module.exports = {
   getOrCreateProduct,
   getTableName,
   getTablePerformName,
+  getViewFinishGoodLiter,
   getProductionName,
 };

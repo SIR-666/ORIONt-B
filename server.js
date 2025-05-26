@@ -83,6 +83,7 @@ const {
   getOrCreateProduct,
   getTableName,
   getTablePerformName,
+  getViewFinishGoodLiter,
   getProductionName,
   parseLineSpeedLoss,
   parseLineWIB,
@@ -2512,6 +2513,10 @@ app.get("/getFinishGoodLiter", async (req, res) => {
   try {
     let pool = await sql.connect(config);
 
+    const { plant, line } = req.query;
+
+    const viewName = getViewFinishGoodLiter(plant, line);
+
     const query = `
       SELECT 
         Plant, 
@@ -2519,7 +2524,7 @@ app.get("/getFinishGoodLiter", async (req, res) => {
         TanggalProduksi,
         SUM(FinishGoodPcs) AS FinishGoodPcs,
         ROUND(SUM(FinishGoodLiter), 2) AS FinishGoodLiter
-      FROM dbo.VW_Filling_FinishGoodLiter
+      FROM dbo.${viewName}
       GROUP BY Plant, Line, TanggalProduksi
       ORDER BY TanggalProduksi DESC;
     `;
