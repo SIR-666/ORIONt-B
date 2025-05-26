@@ -263,186 +263,21 @@ app.post("/createEmptyPO", async (req, res) => {
 
     const baseId = Date.now();
 
-    let insertOrderQuery;
-    if (groupSelection && Object.keys(groupSelection).length > 1) {
-      const shifts = [
-        { start: "06:00", end: "14:00" }, // Shift I
-        { start: "14:00", end: "22:00" }, // Shift II
-        { start: "22:00", end: "06:00" }, // Shift III (next day)
-      ];
+    const groupResult = await pool
+      .request()
+      .input("group", sql.VarChar, groupSelection)
+      .input("plant", sql.VarChar, plant)
+      .query(
+        "SELECT id FROM GroupMaster WHERE [group] = @group AND plant = @plant;"
+      );
 
-      const allShifts = [
-        ...shifts,
-        ...shifts.map((shift) => ({ ...shift, isPreviousDay: true })),
-      ];
+    const groupId = groupResult.recordset[0]?.id;
 
-      const start = new Date(date_start);
-      const end = new Date(date_end);
+    if (!groupId) {
+      return res.status(400).json({ message: "Invalid group provided." });
+    }
 
-      let currentShiftEnd = null;
-
-      for (const shift of allShifts) {
-        const shiftStart = new Date(start);
-        const shiftEnd = new Date(start);
-
-        const [startHour, startMinute] = shift.start.split(":").map(Number);
-        const [endHour, endMinute] = shift.end.split(":").map(Number);
-
-        if (shift.isPreviousDay) {
-          shiftStart.setDate(shiftStart.getDate() - 1); // Move to previous day
-          shiftEnd.setDate(shiftEnd.getDate() - 1);
-        }
-
-        shiftStart.setHours(startHour, startMinute, 0, 0);
-        if (
-          endHour < startHour ||
-          (endHour === startHour && endMinute < startMinute)
-        ) {
-          // Handles shifts ending the next day
-          shiftEnd.setDate(shiftEnd.getDate() + 1);
-        }
-        shiftEnd.setHours(endHour, endMinute, 0, 0);
-
-        // Check if the start time falls within this shift
-        if (start >= shiftStart && start < shiftEnd) {
-          currentShiftEnd = shiftEnd;
-          break;
-        }
-      }
-
-      const splitOrders = [];
-      let current = new Date(start);
-
-      let groupId;
-      let groupIndex = 1;
-
-      const firstGroup = groupSelection[0];
-      const groupResult = await pool
-        .request()
-        .input("group", sql.VarChar, firstGroup)
-        .query("SELECT id FROM GroupMaster WHERE [group] = @group;");
-
-      const groupNumber = groupResult.recordset[0]?.id;
-
-      if (!groupNumber) {
-        return res.status(400).json({ message: "Invalid group provided." });
-      }
-
-      if (currentShiftEnd) {
-        await pool
-          .request()
-          .input("id", sql.BigInt, baseId)
-          .input("start", sql.DateTime, date_start)
-          .input("end", sql.DateTime, date_end)
-          .input("actual_start", sql.DateTime, date_start)
-          .input("actual_end", sql.DateTime, currentShiftEnd)
-          .input("plant", sql.VarChar, plant)
-          .input("line", sql.VarChar, line.toUpperCase())
-          .input("group", sql.Int, groupNumber).query(`
-          INSERT INTO [dbo].[ProductionOrder] 
-        (
-          id, product_id, qty, date_start, date_end, status, created_at, updated_at, actual_start, actual_end, plant, line, completion_count, [group]
-        )
-        VALUES (
-          @id, 131, 0, @start, @end, 'Completed', GETDATE(), GETDATE(), @actual_start, @actual_end, @plant, @line, 1, @group
-        )
-        `);
-      }
-
-      while (current < end) {
-        for (let i = 0; i < shifts.length; i++) {
-          const shift = shifts[i];
-          const shiftStart = new Date(current);
-          const shiftEnd = new Date(current);
-
-          const [startHour, startMinute] = shift.start.split(":").map(Number);
-          const [endHour, endMinute] = shift.end.split(":").map(Number);
-
-          shiftStart.setHours(startHour, startMinute, 0, 0);
-          if (endHour < startHour) {
-            // Handles shifts ending the next day
-            shiftEnd.setDate(shiftEnd.getDate() + 1);
-          }
-          shiftEnd.setHours(endHour, endMinute, 0, 0);
-
-          const groupSelections = groupSelection[groupIndex]; // Use groupIndex instead of i
-          if (!groupSelections) {
-            console.warn(`No group selection for group index ${groupIndex}`);
-            groupIndex = 0; // Reset to the first group if out of bounds
-            continue;
-          }
-
-          switch (groupSelections) {
-            case "BROMO":
-              groupId = 1;
-              break;
-
-            case "SEMERU":
-              groupId = 2;
-              break;
-
-            case "KRAKATAU":
-              groupId = 3;
-              break;
-
-            default:
-              console.error(`Unknown group selection: ${groupSelections}`);
-              groupId = null;
-              break;
-          }
-
-          if (start < shiftEnd && end > shiftStart && start < shiftStart) {
-            const actualStart = start > shiftStart ? start : shiftStart;
-            const actualEnd = end < shiftEnd ? end : shiftEnd;
-
-            // Push split order to array
-            splitOrders.push({
-              baseId,
-              actual_start: actualStart,
-              actual_end: actualEnd,
-              group: groupId,
-            });
-
-            groupIndex = (groupIndex + 1) % Object.keys(groupSelection).length;
-          }
-
-          // Update the `current` pointer
-          current = new Date(shiftEnd);
-        }
-      }
-
-      for (const order of splitOrders) {
-        insertOrderQuery = await pool
-          .request()
-          .input("id", sql.BigInt, baseId)
-          .input("start", sql.DateTime, date_start)
-          .input("end", sql.DateTime, date_end)
-          .input("actual_start", sql.DateTime, order.actual_start)
-          .input("actual_end", sql.DateTime, order.actual_end)
-          .input("plant", sql.VarChar, plant)
-          .input("line", sql.VarChar, line.toUpperCase())
-          .input("group", sql.Int, order.group)
-          .query(`INSERT INTO [dbo].[ProductionOrder] 
-        (
-          id, product_id, qty, date_start, date_end, status, created_at, updated_at, actual_start, actual_end, plant, line, completion_count, [group]
-        )
-        VALUES (
-          @id, 131, 0, @start, @end, 'Completed', GETDATE(), GETDATE(), @actual_start, @actual_end, @plant, @line, 1, @group
-        )`);
-      }
-    } else {
-      const groupResult = await pool
-        .request()
-        .input("group", sql.VarChar, groupSelection[0])
-        .query("SELECT id FROM GroupMaster WHERE [group] = @group;");
-
-      const groupId = groupResult.recordset[0]?.id;
-
-      if (!groupId) {
-        return res.status(400).json({ message: "Invalid group provided." });
-      }
-
-      const insertQuery = `
+    const insertQuery = `
       INSERT INTO [dbo].[ProductionOrder] 
       (
         id, product_id, qty, date_start, date_end, status, created_at, updated_at, actual_start, actual_end, plant, line, completion_count, [group]
@@ -451,18 +286,18 @@ app.post("/createEmptyPO", async (req, res) => {
         @id, 131, 0, @start, @end, 'Completed', GETDATE(), GETDATE(), @actual_start, @actual_end, @plant, @line, 1, @group
       )
     `;
-      insertOrderQuery = await pool
-        .request()
-        .input("id", sql.BigInt, baseId)
-        .input("start", sql.DateTime, date_start)
-        .input("end", sql.DateTime, date_end)
-        .input("actual_start", sql.DateTime, date_start)
-        .input("actual_end", sql.DateTime, date_end)
-        .input("plant", sql.VarChar, plant)
-        .input("line", sql.VarChar, line.toUpperCase())
-        .input("group", sql.Int, groupId)
-        .query(insertQuery);
-    }
+
+    const insertOrderQuery = await pool
+      .request()
+      .input("id", sql.BigInt, baseId)
+      .input("start", sql.DateTime, date_start)
+      .input("end", sql.DateTime, date_end)
+      .input("actual_start", sql.DateTime, date_start)
+      .input("actual_end", sql.DateTime, date_end)
+      .input("plant", sql.VarChar, plant)
+      .input("line", sql.VarChar, line.toUpperCase())
+      .input("group", sql.Int, groupId)
+      .query(insertQuery);
 
     if (insertOrderQuery.rowsAffected[0] === 0) {
       throw new Error("Failed to insert production order.");
