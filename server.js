@@ -2518,14 +2518,7 @@ app.get("/getFinishGoodLiter", async (req, res) => {
     const viewName = getViewFinishGoodLiter(plant, line);
 
     const query = `
-      SELECT 
-        Plant, 
-        Line, 
-        TanggalProduksi,
-        SUM(FinishGoodPcs) AS FinishGoodPcs,
-        ROUND(SUM(FinishGoodLiter), 2) AS FinishGoodLiter
-      FROM dbo.${viewName}
-      GROUP BY Plant, Line, TanggalProduksi
+      SELECT * FROM dbo.${viewName}
       ORDER BY TanggalProduksi DESC;
     `;
 

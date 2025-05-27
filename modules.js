@@ -744,24 +744,24 @@ function getTablePerformName(plant, line) {
 
 function getViewFinishGoodLiter(plant, line) {
   const tableMapping = {
-    "Milk Processing": "VW_Filling_FinishGoodLiter",
+    "Milk Processing": "VW_Processing_FinishGoodLiter",
     "Milk Filling Packing": "VW_Filling_FinishGoodLiter",
-    Cheese: "VW_Filling_FinishGoodLiter",
+    Cheese: "VW_Cheese_FinishGoodLiter",
   };
 
   if (plant === "Yogurt") {
     const upperLine = line?.toUpperCase() || "";
 
     if (["YA", "YB", "YD (POUCH)"].includes(upperLine)) {
-      return "VW_Filling_FinishGoodLiter";
+      return "VW_Yogurt_FinishGoodLiter";
     } else if (upperLine === "YRTD") {
-      return "VW_Filling_FinishGoodLiter";
+      return "VW_Yogurt_FinishGoodLiter";
     } else if (upperLine === "PASTEURIZER") {
-      return "VW_Filling_FinishGoodLiter";
+      return "VW_Pasteurizer_FinishGoodLiter";
     }
 
     // Default fallback jika line tidak cocok
-    return "VW_Filling_FinishGoodLiter";
+    return "VW_Yogurt_FinishGoodLiter";
   }
 
   // Untuk plant lain
