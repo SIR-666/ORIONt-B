@@ -390,6 +390,175 @@ function getShift(shift, date) {
   return { start: startTime, end: endTime };
 }
 
+// const saveSplitOrders = async (
+//   pool,
+//   poNumber,
+//   product_id,
+//   qty,
+//   startDate,
+//   endDate,
+//   startTime,
+//   endTime,
+//   plant,
+//   line,
+//   groupSelections
+// ) => {
+//   try {
+//     const shifts = [
+//       { start: "06:00", end: "14:00" }, // Shift I
+//       { start: "14:00", end: "22:00" }, // Shift II
+//       { start: "22:00", end: "06:00" }, // Shift III (next day)
+//     ];
+
+//     const start = new Date(startTime);
+//     const end = new Date(endTime);
+
+//     let currentShiftEnd = null;
+
+//     const allShifts = [
+//       ...shifts,
+//       ...shifts.map((shift) => ({ ...shift, isPreviousDay: true })),
+//     ];
+
+//     for (const shift of allShifts) {
+//       const shiftStart = new Date(start);
+//       const shiftEnd = new Date(start);
+
+//       const [startHour, startMinute] = shift.start.split(":").map(Number);
+//       const [endHour, endMinute] = shift.end.split(":").map(Number);
+
+//       if (shift.isPreviousDay) {
+//         shiftStart.setDate(shiftStart.getDate() - 1); // Move to previous day
+//         shiftEnd.setDate(shiftEnd.getDate() - 1);
+//       }
+
+//       shiftStart.setHours(startHour, startMinute, 0, 0);
+//       if (
+//         endHour < startHour ||
+//         (endHour === startHour && endMinute < startMinute)
+//       ) {
+//         // Handles shifts ending the next day
+//         shiftEnd.setDate(shiftEnd.getDate() + 1);
+//       }
+//       shiftEnd.setHours(endHour, endMinute, 0, 0);
+
+//       // Check if the start time falls within this shift
+//       if (start >= shiftStart && start < shiftEnd) {
+//         currentShiftEnd = shiftEnd;
+//         break;
+//       }
+//     }
+
+//     if (currentShiftEnd) {
+//       await pool
+//         .request()
+//         .input("poNumber", sql.BigInt, poNumber)
+//         .input("shiftEnd", sql.DateTime, currentShiftEnd).query(`
+//           UPDATE [dbo].[ProductionOrder]
+//           SET [actual_end] = @shiftEnd,
+//               [status] = 'Completed',
+//               [updated_at] = GETDATE()
+//           WHERE id = @poNumber
+//         `);
+
+//       // Adjust the start time for the split orders
+//       startTime = currentShiftEnd;
+//     }
+
+//     const splitOrders = [];
+//     let current = new Date(start);
+
+//     let groupId;
+//     let groupIndex = 0; // Initialize the group index
+//     while (current < end) {
+//       for (let i = 0; i < shifts.length; i++) {
+//         const shift = shifts[i];
+//         const shiftStart = new Date(current);
+//         const shiftEnd = new Date(current);
+
+//         const [startHour, startMinute] = shift.start.split(":").map(Number);
+//         const [endHour, endMinute] = shift.end.split(":").map(Number);
+
+//         shiftStart.setHours(startHour, startMinute, 0, 0);
+//         if (endHour < startHour) {
+//           // Handles shifts ending the next day
+//           shiftEnd.setDate(shiftEnd.getDate() + 1);
+//         }
+//         shiftEnd.setHours(endHour, endMinute, 0, 0);
+
+//         const groupSelection = groupSelections[groupIndex]; // Use groupIndex instead of i
+//         if (!groupSelection) {
+//           console.warn(`No group selection for group index ${groupIndex}`);
+//           groupIndex = 0; // Reset to the first group if out of bounds
+//           continue;
+//         }
+
+//         switch (groupSelection) {
+//           case "BROMO":
+//             groupId = 1;
+//             break;
+
+//           case "SEMERU":
+//             groupId = 2;
+//             break;
+
+//           case "KRAKATAU":
+//             groupId = 3;
+//             break;
+
+//           default:
+//             console.error(`Unknown group selection: ${groupSelection}`);
+//             groupId = null;
+//             break;
+//         }
+
+//         if (start < shiftEnd && end > shiftStart && start < shiftStart) {
+//           const actualStart = start > shiftStart ? start : shiftStart;
+//           const actualEnd = end < shiftEnd ? end : shiftEnd;
+
+//           // Push split order to array
+//           splitOrders.push({
+//             poNumber,
+//             actual_start: actualStart,
+//             actual_end: actualEnd,
+//             group: groupId,
+//           });
+
+//           groupIndex = (groupIndex + 1) % Object.keys(groupSelections).length;
+//         }
+
+//         // Update the `current` pointer
+//         current = new Date(shiftEnd);
+//       }
+//     }
+
+//     // Save all split orders to the database
+//     for (const order of splitOrders) {
+//       await pool
+//         .request()
+//         .input("poNumber", sql.VarChar, order.poNumber)
+//         .input("productId", sql.Int, product_id)
+//         .input("qty", sql.Int, qty)
+//         .input("date_start", sql.DateTime, startDate)
+//         .input("date_end", sql.DateTime, endDate)
+//         .input("actual_start", sql.DateTime, order.actual_start)
+//         .input("actual_end", sql.DateTime, order.actual_end)
+//         .input("plant", sql.VarChar, plant)
+//         .input("line", sql.VarChar, line)
+//         .input("group", sql.Int, order.group).query(`
+//           INSERT INTO ProductionOrder (id, product_id, qty, [date_start], [date_end], [status], [created_at], [updated_at], [actual_start], [actual_end], [plant], [line], [completion_count], [group])
+//           VALUES (@poNumber, @productId, @qty, @date_start, @date_end, 'Completed', GETDATE(), GETDATE(), @actual_start, @actual_end, @plant, @line, 0, @group)
+//         `);
+//     }
+
+//     console.log("Split orders saved successfully!");
+//     return splitOrders; // Return split orders for debugging or other uses
+//   } catch (error) {
+//     console.error("Error saving split orders:", error);
+//     throw error;
+//   }
+// };
+
 const saveSplitOrders = async (
   pool,
   poNumber,
@@ -404,15 +573,22 @@ const saveSplitOrders = async (
   groupSelections
 ) => {
   try {
+    if (
+      !groupSelections ||
+      !Array.isArray(groupSelections) ||
+      groupSelections.length === 0
+    ) {
+      throw new Error("Invalid or empty groupSelections provided.");
+    }
+
     const shifts = [
-      { start: "06:00", end: "14:00" }, // Shift I
-      { start: "14:00", end: "22:00" }, // Shift II
-      { start: "22:00", end: "06:00" }, // Shift III (next day)
+      { start: "06:00", end: "14:00" },
+      { start: "14:00", end: "22:00" },
+      { start: "22:00", end: "06:00" },
     ];
 
     const start = new Date(startTime);
     const end = new Date(endTime);
-
     let currentShiftEnd = null;
 
     const allShifts = [
@@ -428,7 +604,7 @@ const saveSplitOrders = async (
       const [endHour, endMinute] = shift.end.split(":").map(Number);
 
       if (shift.isPreviousDay) {
-        shiftStart.setDate(shiftStart.getDate() - 1); // Move to previous day
+        shiftStart.setDate(shiftStart.getDate() - 1);
         shiftEnd.setDate(shiftEnd.getDate() - 1);
       }
 
@@ -437,12 +613,10 @@ const saveSplitOrders = async (
         endHour < startHour ||
         (endHour === startHour && endMinute < startMinute)
       ) {
-        // Handles shifts ending the next day
         shiftEnd.setDate(shiftEnd.getDate() + 1);
       }
       shiftEnd.setHours(endHour, endMinute, 0, 0);
 
-      // Check if the start time falls within this shift
       if (start >= shiftStart && start < shiftEnd) {
         currentShiftEnd = shiftEnd;
         break;
@@ -461,17 +635,15 @@ const saveSplitOrders = async (
           WHERE id = @poNumber
         `);
 
-      // Adjust the start time for the split orders
       startTime = currentShiftEnd;
     }
 
     const splitOrders = [];
-    let current = new Date(start);
+    let current = new Date(startTime);
+    let groupIndex = 0;
 
-    let groupId;
-    let groupIndex = 0; // Initialize the group index
     while (current < end) {
-      for (let i = 0; i < shifts.length; i++) {
+      for (let i = 0; i < shifts.length && current < end; i++) {
         const shift = shifts[i];
         const shiftStart = new Date(current);
         const shiftEnd = new Date(current);
@@ -480,43 +652,33 @@ const saveSplitOrders = async (
         const [endHour, endMinute] = shift.end.split(":").map(Number);
 
         shiftStart.setHours(startHour, startMinute, 0, 0);
-        if (endHour < startHour) {
-          // Handles shifts ending the next day
-          shiftEnd.setDate(shiftEnd.getDate() + 1);
-        }
+        if (endHour < startHour) shiftEnd.setDate(shiftEnd.getDate() + 1);
         shiftEnd.setHours(endHour, endMinute, 0, 0);
 
-        const groupSelection = groupSelections[groupIndex]; // Use groupIndex instead of i
-        if (!groupSelection) {
-          console.warn(`No group selection for group index ${groupIndex}`);
-          groupIndex = 0; // Reset to the first group if out of bounds
-          continue;
-        }
+        const groupSelection = groupSelections[groupIndex];
+        let groupId;
 
         switch (groupSelection) {
           case "BROMO":
             groupId = 1;
             break;
-
           case "SEMERU":
             groupId = 2;
             break;
-
           case "KRAKATAU":
             groupId = 3;
             break;
-
           default:
-            console.error(`Unknown group selection: ${groupSelection}`);
-            groupId = null;
-            break;
+            console.warn(`Unknown group selection: ${groupSelection}`);
+            current = new Date(shiftEnd); // Tetap majukan waktu!
+            groupIndex = (groupIndex + 1) % groupSelections.length;
+            continue; // Skip iterasi ini
         }
 
-        if (start < shiftEnd && end > shiftStart && start < shiftStart) {
-          const actualStart = start > shiftStart ? start : shiftStart;
+        if (current < shiftEnd && end > shiftStart) {
+          const actualStart = current > shiftStart ? current : shiftStart;
           const actualEnd = end < shiftEnd ? end : shiftEnd;
 
-          // Push split order to array
           splitOrders.push({
             poNumber,
             actual_start: actualStart,
@@ -524,15 +686,13 @@ const saveSplitOrders = async (
             group: groupId,
           });
 
-          groupIndex = (groupIndex + 1) % Object.keys(groupSelections).length;
+          groupIndex = (groupIndex + 1) % groupSelections.length;
         }
 
-        // Update the `current` pointer
-        current = new Date(shiftEnd);
+        current = new Date(shiftEnd); // Selalu majukan waktu
       }
     }
 
-    // Save all split orders to the database
     for (const order of splitOrders) {
       await pool
         .request()
@@ -546,13 +706,20 @@ const saveSplitOrders = async (
         .input("plant", sql.VarChar, plant)
         .input("line", sql.VarChar, line)
         .input("group", sql.Int, order.group).query(`
-          INSERT INTO ProductionOrder (id, product_id, qty, [date_start], [date_end], [status], [created_at], [updated_at], [actual_start], [actual_end], [plant], [line], [completion_count], [group])
-          VALUES (@poNumber, @productId, @qty, @date_start, @date_end, 'Completed', GETDATE(), GETDATE(), @actual_start, @actual_end, @plant, @line, 0, @group)
+          INSERT INTO ProductionOrder (
+            id, product_id, qty, date_start, date_end, status,
+            created_at, updated_at, actual_start, actual_end,
+            plant, line, completion_count, [group]
+          ) VALUES (
+            @poNumber, @productId, @qty, @date_start, @date_end, 'Completed',
+            GETDATE(), GETDATE(), @actual_start, @actual_end,
+            @plant, @line, 0, @group
+          )
         `);
     }
 
     console.log("Split orders saved successfully!");
-    return splitOrders; // Return split orders for debugging or other uses
+    return splitOrders;
   } catch (error) {
     console.error("Error saving split orders:", error);
     throw error;
