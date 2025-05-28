@@ -525,18 +525,40 @@ app.post("/updateStartEndPO", async (req, res) => {
     const idInitial = `${lineInitial}EG`;
 
     if (actual_start) {
+      const excludedSuffixes = [
+        "Net Prod. Time",
+        "Ideal Running Time",
+        "Operational Time",
+        "PROD ACTIVITY",
+        "Available Time",
+        "BREAKDOWN PROCESS FAILURE MINOR STOP",
+        "PROCESS WAITING",
+        "PLANNED STOP",
+        "NOT REPORTED",
+        "UT-No PO",
+      ];
+
       const queryData = `
         UPDATE [dbo].[${tableName}]
         SET Tanggal = @actualStart
         WHERE ID LIKE @id
-        AND Tanggal = @poStart
-    `;
+          AND Tanggal = @poStart
+          AND NOT (
+            RIGHT([TypeDowntime], LEN([TypeDowntime]) - CHARINDEX('.', [TypeDowntime])) IN (${excludedSuffixes
+              .map((_, i) => `@suffix${i}`)
+              .join(", ")})
+          )
+      `;
 
       const requestData = pool
         .request()
         .input("id", sql.VarChar, `${idInitial}%`)
         .input("actualStart", sql.DateTime, actual_start)
         .input("poStart", sql.DateTime, poStart);
+
+      excludedSuffixes.forEach((val, i) => {
+        requestData.input(`suffix${i}`, sql.VarChar, val);
+      });
 
       const resultData = await requestData.query(queryData);
       if (resultData.rowsAffected[0] === 0) {
