@@ -845,7 +845,7 @@ app.get("/getAllDowntime", async (req, res) => {
 
     const query = `
       SELECT TOP 5000 id, Date, Unit, Shift, Line, [Group], Downtime_Category, Mesin, Jenis, Keterangan, Minutes 
-      FROM dbo.tb_reasonDowntime 
+      FROM dbo.PBI_reason_downtime
       order by id desc;`;
 
     const result = await pool.request().query(query);
