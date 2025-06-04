@@ -944,6 +944,7 @@ app.post("/createStoppage", async (req, res) => {
     duration,
     group,
     plant,
+    cipimpact,
   } = req.body;
 
   const uppercasedLine = line.toUpperCase();
@@ -1017,6 +1018,29 @@ app.post("/createStoppage", async (req, res) => {
       plant
     );
 
+    let tableCIPImpact;
+    let cipStartTime;
+    let cipType;
+    let cipCategory;
+    if (cipimpact) {
+      cipType = "CIP 6 Impact";
+      cipCategory = type;
+
+      // Hitung waktu mulai untuk cipimpact: newDateStart + duration (menit)
+      cipStartTime = new Date(newDateStart);
+      cipStartTime.setMinutes(cipStartTime.getMinutes() + duration);
+
+      tableCIPImpact = parseTableFillingValues(
+        cipStartTime,
+        uppercasedLine,
+        machine,
+        cipType,
+        date_week,
+        group,
+        plant
+      );
+    }
+
     const resultReason = await transaction
       .request()
       .input("unit", sql.VarChar, updatedPlant) // untuk unit menggunakan updated plant name
@@ -1070,7 +1094,55 @@ app.post("/createStoppage", async (req, res) => {
       console.error("Insert operation failed: ", resultReason);
       throw new Error("Insert operation failed or did not return an ID.");
     }
+
     const newId = resultReason.recordset[0].Id;
+
+    if (cipimpact) {
+      await transaction
+        .request()
+        .input("unit", sql.VarChar, updatedPlant)
+        .input("date_start", sql.DateTime, cipStartTime) // gunakan waktu setelah downtime utama
+        .input("date_month", sql.VarChar, date_month)
+        .input("date_week", sql.VarChar, date_week)
+        .input("shift", sql.VarChar, shift)
+        .input("group", sql.VarChar, group)
+        .input("line", sql.VarChar, uppercasedLine)
+        .input("category", sql.VarChar, cipType)
+        .input("machine", sql.VarChar, machine)
+        .input("type", sql.VarChar, cipCategory)
+        .input("comments", sql.VarChar, "-")
+        .input("duration", sql.Float, cipimpact)
+        .query(`INSERT INTO dbo.tb_reasonDowntime 
+            (Unit
+            ,Code
+            ,Date
+            ,Month
+            ,Week
+            ,Time
+            ,Shift
+            ,[Group]
+            ,Line
+            ,Downtime_Category
+            ,Mesin
+            ,Jenis
+            ,Keterangan
+            ,Minutes)
+            VALUES 
+            (@unit
+            ,''
+            ,@date_start
+            ,@date_month
+            ,@date_week
+            ,''
+            ,@shift
+            ,@group
+            ,@line
+            ,@type
+            ,@machine
+            ,@category
+            ,@comments
+            ,@duration);`);
+    }
 
     const existingEntry = await transaction
       .request()
@@ -1130,6 +1202,37 @@ app.post("/createStoppage", async (req, res) => {
               ,@TypeDowntime
               ,GETDATE());
           `);
+
+      if (cipimpact) {
+        await transaction
+          .request()
+          .input("id", sql.VarChar, tableCIPImpact.id)
+          .input("No", sql.VarChar, tableCIPImpact.combined)
+          .input("Week", sql.VarChar, date_week)
+          .input("Week2", sql.VarChar, date_week)
+          .input("Tanggal", sql.DateTime, cipStartTime)
+          .input("TypeDowntime", sql.VarChar, tableCIPImpact.typeDowntime)
+          .input("Downtime", sql.VarChar, cipimpact.toString()).query(`
+              INSERT INTO dbo.${tableName} (
+              ID
+              ,No
+              ,Week
+              ,Week2
+              ,Tanggal
+              ,DownTime
+              ,TypeDowntime
+              ,datesystem) 
+              VALUES (
+              @id
+              ,@No
+              ,@Week
+              ,@Week2
+              ,@Tanggal
+              ,@Downtime
+              ,@TypeDowntime
+              ,GETDATE());
+          `);
+      }
     }
 
     // Commit transaction if all operations succeed
