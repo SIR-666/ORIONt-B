@@ -2669,7 +2669,8 @@ app.get("/getMasterDowntime", async (req, res) => {
         d.mesin, 
         d.downtime
       FROM dbo.DowntimeMaster d
-      WHERE d.line = @line;
+      WHERE d.line = @line
+      ORDER BY d.id DESC;
     `;
 
     const result = await pool
@@ -2775,6 +2776,136 @@ app.get("/getMachineDowntime", async (req, res) => {
       .request()
       .input("line", sql.VarChar, line.toUpperCase())
       .query(query);
+
+    res.json(result.recordset);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.get("/getMasterCILT", async (req, res) => {
+  try {
+    let pool = await sql.connect(config);
+
+    const { plant } = req.query;
+
+    const query = `
+      SELECT *
+      FROM tb_CILT_master
+      WHERE plant = @plant 
+      ORDER BY id DESC;
+    `;
+
+    const result = await pool
+      .request()
+      .input("plant", sql.VarChar, plant)
+      .query(query);
+
+    res.json(result.recordset);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.post("/addMasterCILT", async (req, res) => {
+  try {
+    let pool = await sql.connect(config);
+
+    const data = req.body;
+
+    const query = `
+      INSERT INTO tb_CILT_master (cilt, type, ci, activity, min, max, frekwensi, content, image, plant, line, status, good, need, red)
+      OUTPUT inserted.id
+      VALUES (@cilt, @type, @ci, @activity, @min, @max, @frekwensi, @content, @image, @plant, @line, @status, @good, @need, @red);
+    `;
+
+    const result = await pool
+      .request()
+      .input("cilt", sql.VarChar, data.cilt)
+      .input("type", sql.VarChar, data.type)
+      .input("ci", sql.VarChar, data.ci)
+      .input("activity", sql.VarChar, data.activity)
+      .input("min", sql.VarChar, "-")
+      .input("max", sql.VarChar, "-")
+      .input("frekwensi", sql.VarChar, data.frekwensi)
+      .input("content", sql.VarChar, data.content)
+      .input("image", sql.VarChar, data.image)
+      .input("plant", sql.NVarChar, data.plant)
+      .input("line", sql.NVarChar, data.line)
+      .input("status", sql.VarChar, data.status)
+      .input("good", sql.Float, data.good)
+      .input("need", sql.Float, data.need)
+      .input("red", sql.Float, data.red)
+      .query(query);
+
+    res.json(result.recordset);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.post("/updateMasterCILT", async (req, res) => {
+  try {
+    let pool = await sql.connect(config);
+
+    const data = req.body;
+
+    if (data.status === "0") {
+      data.good = null;
+      data.need = null;
+      data.red = null;
+    }
+
+    const query = `
+      UPDATE tb_CILT_master
+      SET cilt = @cilt, type = @type, ci = @ci, activity = @activity, min = @min, max = @max, 
+          frekwensi = @frekwensi, content = @content, image = @image, plant = @plant, 
+          line = @line, status = @status, good = @good, need = @need, red = @red
+      WHERE id = @id;
+    `;
+
+    const result = await pool
+      .request()
+      .input("id", sql.Int, data.id)
+      .input("cilt", sql.VarChar, data.cilt)
+      .input("type", sql.VarChar, data.type)
+      .input("ci", sql.VarChar, data.ci)
+      .input("activity", sql.VarChar, data.activity)
+      .input("min", sql.VarChar, "-")
+      .input("max", sql.VarChar, "-")
+      .input("frekwensi", sql.VarChar, data.frekwensi)
+      .input("content", sql.VarChar, data.content)
+      .input("image", sql.VarChar, data.image)
+      .input("plant", sql.NVarChar, data.plant)
+      .input("line", sql.NVarChar, data.line)
+      .input("status", sql.VarChar, data.status)
+      .input("good", sql.Float, data.good)
+      .input("need", sql.Float, data.need)
+      .input("red", sql.Float, data.red)
+      .query(query);
+
+    res.json(result.recordset);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.delete("/deleteMasterCILT", async (req, res) => {
+  try {
+    let pool = await sql.connect(config);
+
+    const { id } = req.body;
+
+    const query = `
+      DELETE FROM tb_CILT_master
+      WHERE id = @id;
+    `;
+
+    const result = await pool.request().input("id", sql.Int, id).query(query);
 
     res.json(result.recordset);
   } catch (error) {
