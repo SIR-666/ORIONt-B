@@ -619,6 +619,8 @@ const saveSplitOrders = async (
 
       if (start >= shiftStart && start < shiftEnd) {
         currentShiftEnd = shiftEnd;
+        console.warn(`start melebihi batas : ${plant}`);
+        console.warn(`start melebihi batas : ${product_id}`);
         break;
       }
     }
