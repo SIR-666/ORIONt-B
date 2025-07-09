@@ -2758,6 +2758,43 @@ app.delete("/deleteMasterDowntime", async (req, res) => {
   }
 });
 
+//delete PO
+app.delete("/delete-po/:id/:line", async (req, res) => {
+  const { id, line } = req.params;
+  console.log("deleted id :", id);
+  try {
+    let pool = await sql.connect(config);
+
+    // Query DELETE dari tb_filling_downtime_all2
+    await pool
+      .request()
+      .input("id", sql.VarChar, id)
+      .input("line", sql.VarChar, line).query(`
+        DELETE FD
+        FROM tb_filling_downtime_all2 FD
+        JOIN ProductionOrder PO ON CONVERT(DATE, PO.actual_start) = CONVERT(DATE, FD.Tanggal)
+        JOIN Product P ON PO.product_id = P.id
+        WHERE 
+          PO.id = @id AND 
+          FD.TypeDowntime COLLATE Latin1_General_CI_AS LIKE '%' + P.sku + '%';
+      `);
+
+    // Query DELETE dari ProductionOrder
+    await pool
+      .request()
+      .input("id", sql.VarChar, id)
+      .input("line", sql.VarChar, line).query(`
+        DELETE FROM ProductionOrder
+        WHERE id = @id;
+      `);
+
+    res.status(200).json({ message: "Data berhasil dihapus." });
+  } catch (error) {
+    console.error("Delete PO error:", error);
+    res.status(500).json({ error: "Terjadi kesalahan saat menghapus data." });
+  }
+});
+
 app.get("/getMachineDowntime", async (req, res) => {
   try {
     let pool = await sql.connect(config);
