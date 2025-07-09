@@ -2641,7 +2641,7 @@ app.get("/getFinishGoodLiter", async (req, res) => {
     const { plant, line } = req.query;
 
     const viewName = getViewFinishGoodLiter(plant, line);
-
+    // console.log("table :", viewName);
     const query = `
       SELECT * FROM dbo.${viewName}
       ORDER BY TanggalProduksi DESC;

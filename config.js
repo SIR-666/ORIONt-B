@@ -7,14 +7,15 @@ const config = {
   password: process.env.DATABASE_PASSWORD,
   server: process.env.DATABASE_SERVER,
   database: process.env.DATABASE_NAME,
+  requestTimeout: 60000, // ✅ Tambahkan ini — timeout dalam milidetik (misalnya: 60 detik)
   pool: {
-    max: 10, // Maximum number of connections in the pool
-    min: 0, // Minimum number of connections in the pool
-    idleTimeoutMillis: 30000, // Time a connection should stay idle before being released
+    max: 10,
+    min: 0,
+    idleTimeoutMillis: 60000,
   },
   options: {
-    encrypt: true, // Use this if you're on Azure SQL or need encryption
-    trustServerCertificate: true, // Change to false for production environments
+    encrypt: true,
+    trustServerCertificate: true,
   },
 };
 
