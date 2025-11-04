@@ -349,6 +349,7 @@ function parseLineDowntime(line, date_start, week, plant) {
       "Line F": "F",
       "Line G": "G",
       "Line H": "H",
+      "Line BIB": "I",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {

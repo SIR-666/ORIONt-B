@@ -8,7 +8,7 @@ const port = process.env.PORT_1 | 3001;
 app.use(express.json());
 
 // API Route to get master data for Plant and Line
-app.get("/api/getPlantLine", async (req, res) => {
+app.get("/api/", async (req, res) => {
   try {
     const apiUrl = "http://127.0.0.1:8080/getgreenTAGarea";
     if (!apiUrl) {

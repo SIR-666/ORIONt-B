@@ -12,7 +12,7 @@ app.use(cors());
 app.use(express.json());
 
 // API Route to get master data for Plant and Line
-app.get("/api/getPlantLine", async (req, res) => {
+app.get("/api/", async (req, res) => {
   try {
     const apiUrl = "http://10.24.7.70:8080/getgreenTAGarea";
     if (!apiUrl) {
@@ -2943,6 +2943,71 @@ app.delete("/deleteMasterCILT", async (req, res) => {
     `;
 
     const result = await pool.request().input("id", sql.Int, id).query(query);
+
+    res.json(result.recordset);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.get("/getAllSKU", async (req, res) => {
+  // const { plant } = req.params;
+
+  try {
+    let pool = await sql.connect(config);
+    const result = await pool
+      .request()
+      .query("SELECT * FROM Product ;");
+
+    res.status(200).json(result.recordset);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+app.post("/addSKU", async (req, res) => {
+  try {
+    let pool = await sql.connect(config);
+
+    const data = req.body;
+
+    const query = `
+      DECLARE @idtable TABLE (id INT)
+
+      INSERT INTO ProductionDummy 
+        (plant, material, qty, status, line, date_start, date_end)
+      OUTPUT inserted.id INTO @idtable
+      VALUES 
+        (@plant, @material, @qty, @status, @line, GETDATE(), GETDATE()
+      
+      INSERT INTO dbo.Product
+        (id, sku, category, volume, flag, speed, [line], create_at, update_at)
+      SELECT
+        t.id, @sku, @category, @volume, @flag, @speed, @line, GETDATE(), GETDATE()
+      FROM @idtable AS t;   -- << ambil id dari hasil insert ProductionDummy
+
+      `;
+
+      
+
+    const result = await pool
+      .request()
+      .input("plant", sql.VarChar, data.cilt)
+      .input("material", sql.VarChar, data.type)
+      .input("qty",sql.Int,
+         0)
+      .input("status", sql.VarChar, data.activity)
+      .input("line", sql.VarChar, "-")
+
+
+      .input("sku", sql.VarChar, "-")
+      .input("category", sql.VarChar, data.frekwensi)
+      .input("volume", sql.VarChar, data.content)
+      .input("flag", sql.Int, data.image)
+      .input("speed", sql.NVarChar, data.plant)
+      .input("line", sql.NVarChar, data.line)
+      .query(query);
 
     res.json(result.recordset);
   } catch (error) {
