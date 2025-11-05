@@ -78,6 +78,72 @@ app.get("/api/", async (req, res) => {
   }
 });
 
+app.get("/api/getPlantLine", async (req, res) => {
+  try {
+    const apiUrl = "http://10.24.7.70:8080/getgreenTAGarea";
+    if (!apiUrl) {
+      console.error("URL_FETCH environment variable is not set.");
+      return res.status(500).send("Server configuration error");
+    }
+    const response = await fetch(apiUrl);
+
+    // Optionally process or modify the data here before sending it to clients
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    const selectedData = data
+      .filter((item) => item.observedArea)
+      .map((item) => ({
+        id: item.id,
+        plant: item.observedArea,
+        line:
+          item.observedArea === "Milk Processing" ? item.subGroup : item.line,
+      }));
+
+    const uniqueProcessingItems = Array.from(
+      new Map(
+        selectedData
+          .filter((item) => item.plant === "Milk Processing")
+          .map((item) => [item.line, item])
+      ).values()
+    );
+
+    const uniqueFillingItems = Array.from(
+      new Map(
+        selectedData
+          .filter((item) => item.plant === "Milk Filling Packing")
+          .map((item) => [item.line, item])
+      ).values()
+    );
+
+    const uniqueYogurtItems = Array.from(
+      new Map(
+        selectedData
+          .filter((item) => item.plant === "Yogurt")
+          .map((item) => [item.line, item])
+      ).values()
+    );
+
+    const uniqueCheeseItems = Array.from(
+      new Map(
+        selectedData
+          .filter((item) => item.plant === "Cheese")
+          .map((item) => [item.line, item])
+      ).values()
+    );
+
+    const finalData = uniqueProcessingItems
+      .concat(uniqueFillingItems)
+      .concat(uniqueYogurtItems)
+      .concat(uniqueCheeseItems);
+    res.json(finalData);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Error fetching data");
+  }
+});
+
 const {
   formatDateTime,
   getOrCreateProduct,
