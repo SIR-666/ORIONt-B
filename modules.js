@@ -75,6 +75,7 @@ function parseTableFillingValues(
       "LINE F": "F",
       "LINE G": "G",
       "LINE H": "H",
+      "LINE BIB" : "I",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
