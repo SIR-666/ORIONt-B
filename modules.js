@@ -76,6 +76,7 @@ function parseTableFillingValues(
       "LINE G": "G",
       "LINE H": "H",
       "LINE BIB": "I",
+      "LINE J": "J",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
@@ -138,6 +139,7 @@ function parseLine(line, date_start, week, plant) {
         "LINE G": "G",
         "LINE H": "H",
         "LINE BIB": "I",
+        "LINE J": "J",
       };
       lineInitial = mapping[line];
     } else {
@@ -205,6 +207,7 @@ function parseLineInitial(plant, line) {
       "Line G": "G",
       "Line H": "H",
       "Line BIB": "I",
+      "Line J": "J",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
@@ -252,6 +255,7 @@ function parseLineSpeedLoss(line, date_start, plant) {
       "Line G": "G",
       "Line H": "H",
       "Line BIB": "I",
+      "Line J": "J",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
@@ -303,6 +307,7 @@ function parseLineWIB(line, date_start, plant) {
       "Line G": "G",
       "Line H": "H",
       "Line BIB": "I",
+      "Line J": "J",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
@@ -355,6 +360,7 @@ function parseLineDowntime(line, date_start, week, plant) {
       "Line G": "G",
       "Line H": "H",
       "Line BIB": "I",
+      "Line J": "J",
     };
     lineInitial = mapping[line] || line.charAt(5).toUpperCase();
   } else {
