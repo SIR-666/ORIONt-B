@@ -3024,7 +3024,7 @@ app.get("/getAllSKU", async (req, res) => {
     let pool = await sql.connect(config);
     const result = await pool
       .request()
-      .query("SELECT * FROM Product ;");
+      .query("SELECT t1.id,t2.plant,t1.sku,t1.category,t1.flag,t1.volume,t1.speed,t1.line FROM Product as t1 inner join ProductDummy as t2 on t1.id = t2.id;");
 
     res.status(200).json(result.recordset);
   } catch (error) {
@@ -3035,52 +3035,117 @@ app.get("/getAllSKU", async (req, res) => {
 app.post("/addSKU", async (req, res) => {
   try {
     let pool = await sql.connect(config);
-
+    
     const data = req.body;
+    console.log(data);
+    if(data.edit===true)
+    {
+      const query = `
+      BEGIN
 
-    const query = `
-      DECLARE @idtable TABLE (id INT)
+          UPDATE ProductDummy
+          SET 
+              plant = @plant,
+              material = @material,
+              qty = @qty,
+              status = @status,
+              line = @line,
+              date_start = GETDATE(),
+              date_end = GETDATE()
+          WHERE id = @id;
 
-      INSERT INTO ProductionDummy 
-        (plant, material, qty, status, line, date_start, date_end)
-      OUTPUT inserted.id INTO @idtable
-      VALUES 
-        (@plant, @material, @qty, @status, @line, GETDATE(), GETDATE()
-      
-      INSERT INTO dbo.Product
-        (id, sku, category, volume, flag, speed, [line], create_at, update_at)
-      SELECT
-        t.id, @sku, @category, @volume, @flag, @speed, @line, GETDATE(), GETDATE()
-      FROM @idtable AS t;   -- << ambil id dari hasil insert ProductionDummy
+          UPDATE dbo.Product
+          SET
+              sku = @sku,
+              category = @category,
+              volume = @volume,
+              flag = @flag,
+              speed = @speed,
+              [line] = @line,
+              updated_at = GETDATE()
+          WHERE id = @id;
 
-      `;
+      END
 
-      
+    `;
 
     const result = await pool
       .request()
-      .input("plant", sql.VarChar, data.cilt)
-      .input("material", sql.VarChar, data.type)
-      .input("qty",sql.Int,
-         0)
-      .input("status", sql.VarChar, data.activity)
-      .input("line", sql.VarChar, "-")
-
-
-      .input("sku", sql.VarChar, "-")
-      .input("category", sql.VarChar, data.frekwensi)
-      .input("volume", sql.VarChar, data.content)
-      .input("flag", sql.Int, data.image)
-      .input("speed", sql.NVarChar, data.plant)
-      .input("line", sql.NVarChar, data.line)
+      .input("plant", sql.VarChar, data.plant)
+      .input("sku", sql.VarChar, data.sku)
+      .input("category", sql.VarChar, data.Category)
+      .input("volume", sql.Int, data.volume)
+      .input("flag", sql.Int, data.active?.toLowerCase() === "active" ? 1 : 0)
+      .input("status", sql.NVarChar, data.active?.toLowerCase() === "active" ? "RELEASE" : "DISABLE")
+      .input("speed", sql.Int, data.speed)
+      .input("line", sql.NVarChar, data.selectline)
+      .input("material", sql.NVarChar, data.sku)
+      .input("qty", sql.Int, 0)
+      .input("id", sql.Int, data.id)
       .query(query);
 
     res.json(result.recordset);
+
+
+    }
+    else
+    {
+      const query = `
+      DECLARE @idtable TABLE (id INT);
+
+      INSERT INTO ProductDummy 
+        (plant, material, qty, status, line, date_start, date_end)
+      OUTPUT inserted.id INTO @idtable
+      VALUES 
+        (@plant, @material, @qty, @status, @line, GETDATE(), GETDATE());
+
+      INSERT INTO dbo.Product
+        (id, sku, category, volume, flag, speed, [line], created_at, updated_at)
+      SELECT
+        t.id, @sku, @category, @volume, @flag, @speed, @line, GETDATE(), GETDATE()
+      FROM @idtable AS t;
+    `;
+
+    const result = await pool
+      .request()
+      .input("plant", sql.VarChar, data.plant)
+      .input("sku", sql.VarChar, data.sku)
+      .input("category", sql.VarChar, data.Category)
+      .input("volume", sql.Int, data.volume)
+      .input("flag", sql.Int, data.active?.toLowerCase() === "active" ? 1 : 0)
+      .input("status", sql.NVarChar, data.active?.toLowerCase() === "active" ? "RELEASE" : "DISABLE")
+      .input("speed", sql.Int, data.speed)
+      .input("line", sql.NVarChar, data.selectline)
+      .input("material", sql.NVarChar, data.sku)
+      .input("qty", sql.Int, 0)
+      .query(query);
+
+    res.json(result.recordset);
+    }
+    
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
+// app.get("/getAllSKU", async (req, res) => {
+//   // const { plant } = req.params;
+
+//   try {
+//     let pool = await sql.connect(config);
+//     const result = await pool
+//       .request()
+//       .query("SELECT * FROM Product ;");
+
+//     res.status(200).json(result.recordset);
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ error: "Internal Server Error" });
+//   }
+// });
+
 
 // Start the server
 app.listen(port, () => {
