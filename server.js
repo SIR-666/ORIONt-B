@@ -200,9 +200,9 @@ app.post("/createPO", async (req, res) => {
 
     const finalProcessOrderId =
       plant === "Milk Processing" ||
-      plant === "Yogurt" ||
-      plant === "Cheese" ||
-      plant === "Milk Filling Packing"
+        plant === "Yogurt" ||
+        plant === "Cheese" ||
+        plant === "Milk Filling Packing"
         ? baseId.toString()
         : noProcessOrder;
 
@@ -611,8 +611,8 @@ app.post("/updateStartEndPO", async (req, res) => {
           AND Tanggal = @poStart
           AND NOT (
             RIGHT([TypeDowntime], LEN([TypeDowntime]) - CHARINDEX('.', [TypeDowntime])) IN (${excludedSuffixes
-              .map((_, i) => `@suffix${i}`)
-              .join(", ")})
+          .map((_, i) => `@suffix${i}`)
+          .join(", ")})
           )
       `;
 
@@ -1020,10 +1020,10 @@ app.post("/createStoppage", async (req, res) => {
     plant === "Milk Processing"
       ? "Processing"
       : plant === "Yogurt"
-      ? "Yogurt"
-      : plant === "Cheese"
-      ? "Cheese"
-      : "Filling";
+        ? "Yogurt"
+        : plant === "Cheese"
+          ? "Cheese"
+          : "Filling";
 
   // table name based on plant
   const tableName = getTableName(plant, line);
@@ -3035,11 +3035,10 @@ app.get("/getAllSKU", async (req, res) => {
 app.post("/addSKU", async (req, res) => {
   try {
     let pool = await sql.connect(config);
-    
+
     const data = req.body;
     console.log(data);
-    if(data.edit===true)
-    {
+    if (data.edit === true) {
       const query = `
       BEGIN
 
@@ -3069,27 +3068,26 @@ app.post("/addSKU", async (req, res) => {
 
     `;
 
-    const result = await pool
-      .request()
-      .input("plant", sql.VarChar, data.plant)
-      .input("sku", sql.VarChar, data.sku)
-      .input("category", sql.VarChar, data.Category)
-      .input("volume", sql.Int, data.volume)
-      .input("flag", sql.Int, data.active?.toLowerCase() === "active" ? 1 : 0)
-      .input("status", sql.NVarChar, data.active?.toLowerCase() === "active" ? "RELEASE" : "DISABLE")
-      .input("speed", sql.Int, data.speed)
-      .input("line", sql.NVarChar, data.selectline)
-      .input("material", sql.NVarChar, data.sku)
-      .input("qty", sql.Int, 0)
-      .input("id", sql.Int, data.id)
-      .query(query);
+      const result = await pool
+        .request()
+        .input("plant", sql.VarChar, data.plant)
+        .input("sku", sql.VarChar, data.sku)
+        .input("category", sql.VarChar, data.Category)
+        .input("volume", sql.Int, data.volume)
+        .input("flag", sql.Int, data.active?.toLowerCase() === "active" ? 1 : 0)
+        .input("status", sql.NVarChar, data.active?.toLowerCase() === "active" ? "RELEASE" : "DISABLE")
+        .input("speed", sql.Int, data.speed)
+        .input("line", sql.NVarChar, data.selectline)
+        .input("material", sql.NVarChar, data.sku)
+        .input("qty", sql.Int, 0)
+        .input("id", sql.Int, data.id)
+        .query(query);
 
-    res.json(result.recordset);
+      res.json(result.recordset);
 
 
     }
-    else
-    {
+    else {
       const query = `
       DECLARE @idtable TABLE (id INT);
 
@@ -3106,26 +3104,89 @@ app.post("/addSKU", async (req, res) => {
       FROM @idtable AS t;
     `;
 
-    const result = await pool
-      .request()
-      .input("plant", sql.VarChar, data.plant)
-      .input("sku", sql.VarChar, data.sku)
-      .input("category", sql.VarChar, data.Category)
-      .input("volume", sql.Int, data.volume)
-      .input("flag", sql.Int, data.active?.toLowerCase() === "active" ? 1 : 0)
-      .input("status", sql.NVarChar, data.active?.toLowerCase() === "active" ? "RELEASE" : "DISABLE")
-      .input("speed", sql.Int, data.speed)
-      .input("line", sql.NVarChar, data.selectline)
-      .input("material", sql.NVarChar, data.sku)
-      .input("qty", sql.Int, 0)
-      .query(query);
+      const result = await pool
+        .request()
+        .input("plant", sql.VarChar, data.plant)
+        .input("sku", sql.VarChar, data.sku)
+        .input("category", sql.VarChar, data.Category)
+        .input("volume", sql.Int, data.volume)
+        .input("flag", sql.Int, data.active?.toLowerCase() === "active" ? 1 : 0)
+        .input("status", sql.NVarChar, data.active?.toLowerCase() === "active" ? "RELEASE" : "DISABLE")
+        .input("speed", sql.Int, data.speed)
+        .input("line", sql.NVarChar, data.selectline)
+        .input("material", sql.NVarChar, data.sku)
+        .input("qty", sql.Int, 0)
+        .query(query);
 
-    res.json(result.recordset);
+      res.json(result.recordset);
     }
-    
+
 
   } catch (error) {
     console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// API to get available years from database
+app.get("/getAvailableYears", async (req, res) => {
+  try {
+    let pool = await sql.connect(config);
+    const result = await pool
+      .request()
+      .query(`
+        SELECT DISTINCT d.Year 
+        FROM dbo.DimDateMTD d
+        INNER JOIN dbo.FactProductionMTD f ON d.DateKey = f.DateKey
+        ORDER BY d.Year DESC;
+      `);
+
+    res.status(200).json(result.recordset);
+  } catch (error) {
+    console.error("Error fetching years:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// API to get MTD report with proper joins
+app.get("/getMTDReport", async (req, res) => {
+  const { plant, line, year } = req.query;
+
+  if (!plant || !line || !year) {
+    return res.status(400).json({
+      error: "Missing required parameters: plant, line, and year are required"
+    });
+  }
+
+  try {
+    let pool = await sql.connect(config);
+    const result = await pool
+      .request()
+      .input("plant", sql.VarChar, plant)
+      .input("line", sql.VarChar, line)
+      .input("year", sql.Int, parseInt(year))
+      .query(`
+        SELECT 
+          f.FactID,
+          d.MonthNumber,
+          d.MonthName,
+          d.Year,
+          p.ProdLineName,
+          p.Category,
+          f.Qty AS TotalQty,
+          f.Type AS VolumeType
+        FROM dbo.FactProductionMTD f
+        INNER JOIN dbo.DimDateMTD d ON f.DateKey = d.DateKey
+        INNER JOIN dbo.DimProdLineMTD p ON f.ProdLineKey = p.ProdLineKey
+        WHERE d.Year = @year
+          AND p.Category = @plant
+          AND p.ProdLineName = @line
+        ORDER BY d.MonthNumber ASC;
+       `);
+
+    res.status(200).json(result.recordset);
+  } catch (error) {
+    console.error("Error fetching MTD report:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
