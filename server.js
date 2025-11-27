@@ -3188,6 +3188,185 @@ app.get("/getMTDReport", async (req, res) => {
   }
 });
 
+// API to add new MTD record
+app.post("/addMTDRecord", async (req, res) => {
+  const { year, monthName, prodLineName, category, qty, type } = req.body;
+
+  if (!year || !monthName || !prodLineName || !category || !qty || !type) {
+    return res.status(400).json({
+      error: "Missing required fields: year, monthName, prodLineName, category, qty, type"
+    });
+  }
+
+  try {
+    let pool = await sql.connect(config);
+    logger.info(`addMTDRecord | year=${year}, month=${monthName}, prodLine=${prodLineName}`);
+
+    // Get month number from month name
+    const monthMap = {
+      'January': 1, 'February': 2, 'March': 3, 'April': 4,
+      'May': 5, 'June': 6, 'July': 7, 'August': 8,
+      'September': 9, 'October': 10, 'November': 11, 'December': 12
+    };
+    const monthNumber = monthMap[monthName];
+
+    if (!monthNumber) {
+      return res.status(400).json({ error: "Invalid month name" });
+    }
+
+    // Get or create DateKey
+    let dateKeyResult = await pool
+      .request()
+      .input("year", sql.Int, parseInt(year))
+      .input("monthNumber", sql.Int, monthNumber)
+      .query(`
+        SELECT DateKey FROM dbo.DimDateMTD 
+        WHERE Year = @year AND MonthNumber = @monthNumber
+      `);
+
+    let dateKey;
+    if (dateKeyResult.recordset.length === 0) {
+      // Create new date dimension
+      const insertDateResult = await pool
+        .request()
+        .input("year", sql.Int, parseInt(year))
+        .input("monthNumber", sql.Int, monthNumber)
+        .input("monthName", sql.VarChar, monthName)
+        .query(`
+          INSERT INTO dbo.DimDateMTD (MonthNumber, MonthName, Year)
+          OUTPUT inserted.DateKey
+          VALUES (@monthNumber, @monthName, @year)
+        `);
+      dateKey = insertDateResult.recordset[0].DateKey;
+    } else {
+      dateKey = dateKeyResult.recordset[0].DateKey;
+    }
+
+    // Get or create ProdLineKey
+    let prodLineKeyResult = await pool
+      .request()
+      .input("prodLineName", sql.VarChar, prodLineName)
+      .input("category", sql.VarChar, category)
+      .query(`
+        SELECT ProdLineKey FROM dbo.DimProdLineMTD 
+        WHERE ProdLineName = @prodLineName AND Category = @category
+      `);
+
+    let prodLineKey;
+    if (prodLineKeyResult.recordset.length === 0) {
+      // Create new product line dimension
+      const insertProdLineResult = await pool
+        .request()
+        .input("prodLineName", sql.VarChar, prodLineName)
+        .input("category", sql.VarChar, category)
+        .query(`
+          INSERT INTO dbo.DimProdLineMTD (ProdLineName, Category)
+          OUTPUT inserted.ProdLineKey
+          VALUES (@prodLineName, @category)
+        `);
+      prodLineKey = insertProdLineResult.recordset[0].ProdLineKey;
+    } else {
+      prodLineKey = prodLineKeyResult.recordset[0].ProdLineKey;
+    }
+
+    // Insert fact record
+    const result = await pool
+      .request()
+      .input("dateKey", sql.Int, dateKey)
+      .input("prodLineKey", sql.Int, prodLineKey)
+      .input("qty", sql.Decimal(18, 2), parseFloat(qty))
+      .input("type", sql.VarChar, type)
+      .query(`
+        INSERT INTO dbo.FactProductionMTD (DateKey, ProdLineKey, Qty, Type)
+        VALUES (@dateKey, @prodLineKey, @qty, @type)
+      `);
+
+    logger.info(`addMTDRecord | Record added successfully`);
+    res.status(201).json({
+      message: "Record added successfully",
+      rowsAffected: result.rowsAffected[0]
+    });
+  } catch (error) {
+    logger.error(`addMTDRecord | Error: ${error.message}`);
+    res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+// API to update MTD record
+app.put("/updateMTDRecord", async (req, res) => {
+  const { factId, qty, type } = req.body;
+
+  if (!factId || !qty || !type) {
+    return res.status(400).json({
+      error: "Missing required fields: factId, qty, type"
+    });
+  }
+
+  try {
+    let pool = await sql.connect(config);
+    logger.info(`updateMTDRecord | factId=${factId}, qty=${qty}, type=${type}`);
+
+    const result = await pool
+      .request()
+      .input("factId", sql.Int, parseInt(factId))
+      .input("qty", sql.Decimal(18, 2), parseFloat(qty))
+      .input("type", sql.VarChar, type)
+      .query(`
+        UPDATE dbo.FactProductionMTD
+        SET Qty = @qty, Type = @type
+        WHERE FactID = @factId
+      `);
+
+    if (result.rowsAffected[0] === 0) {
+      return res.status(404).json({ error: "Record not found" });
+    }
+
+    logger.info(`updateMTDRecord | Record updated successfully`);
+    res.status(200).json({
+      message: "Record updated successfully",
+      rowsAffected: result.rowsAffected[0]
+    });
+  } catch (error) {
+    logger.error(`updateMTDRecord | Error: ${error.message}`);
+    res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+// API to delete MTD record
+app.delete("/deleteMTDRecord", async (req, res) => {
+  const { factId } = req.body;
+
+  if (!factId) {
+    return res.status(400).json({ error: "Missing required field: factId" });
+  }
+
+  try {
+    let pool = await sql.connect(config);
+    logger.info(`deleteMTDRecord | factId=${factId}`);
+
+    const result = await pool
+      .request()
+      .input("factId", sql.Int, parseInt(factId))
+      .query(`
+        DELETE FROM dbo.FactProductionMTD
+        WHERE FactID = @factId
+      `);
+
+    if (result.rowsAffected[0] === 0) {
+      return res.status(404).json({ error: "Record not found" });
+    }
+
+    logger.info(`deleteMTDRecord | Record deleted successfully`);
+    res.status(200).json({
+      message: "Record deleted successfully",
+      rowsAffected: result.rowsAffected[0]
+    });
+  } catch (error) {
+    logger.error(`deleteMTDRecord | Error: ${error.message}`);
+    res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
 // app.get("/getAllSKU", async (req, res) => {
 //   // const { plant } = req.params;
 
