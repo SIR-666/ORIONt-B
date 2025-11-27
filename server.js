@@ -3150,20 +3150,19 @@ app.get("/getAvailableYears", async (req, res) => {
 
 // API to get MTD report with proper joins
 app.get("/getMTDReport", async (req, res) => {
-  const { plant, line, year } = req.query;
+  const { year } = req.query;
 
-  if (!plant || !line || !year) {
+  if (!year) {
     return res.status(400).json({
-      error: "Missing required parameters: plant, line, and year are required"
+      error: "Missing required parameter: year is required"
     });
   }
 
   try {
     let pool = await sql.connect(config);
+    logger.info(`getMTDReport | Fetching data for year=${year}`);
     const result = await pool
       .request()
-      .input("plant", sql.VarChar, plant)
-      .input("line", sql.VarChar, line)
       .input("year", sql.Int, parseInt(year))
       .query(`
         SELECT 
@@ -3179,14 +3178,12 @@ app.get("/getMTDReport", async (req, res) => {
         INNER JOIN dbo.DimDateMTD d ON f.DateKey = d.DateKey
         INNER JOIN dbo.DimProdLineMTD p ON f.ProdLineKey = p.ProdLineKey
         WHERE d.Year = @year
-          AND p.Category = @plant
-          AND p.ProdLineName = @line
         ORDER BY d.MonthNumber ASC;
        `);
-
+    logger.info(`getMTDReport | Retrieved ${result.recordset.length} records`);
     res.status(200).json(result.recordset);
   } catch (error) {
-    console.error("Error fetching MTD report:", error);
+    logger.error(`getMTDReport | Error: ${error.message}`);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
